@@ -1,0 +1,132 @@
+{
+  "custom_commands": [
+    "curl -sL https://raw.githubusercontent.com/meiroku/os/main/scripts/post-install.sh -o /tmp/post-install.sh && bash /tmp/post-install.sh"
+  ],
+  "disk_config": {
+    "btrfs_options": {
+      "snapshot_config": {
+        "type": "Snapper"
+      }
+    },
+    "config_type": "default_layout",
+    "device_modifications": [
+      {
+        "device": null,
+        "partitions": [
+          {
+            "btrfs": [],
+            "dev_path": null,
+            "flags": [
+              "boot",
+              "esp"
+            ],
+            "fs_type": "fat32",
+            "mount_options": [],
+            "mountpoint": "/boot",
+            "obj_id": null,
+            "size": {
+              "sector_size": {
+                "unit": "B",
+                "value": 512
+              },
+              "unit": "GiB",
+              "value": 1
+            },
+            "start": {
+              "sector_size": {
+                "unit": "B",
+                "value": 512
+              },
+              "unit": "MiB",
+              "value": 1
+            },
+            "status": "create",
+            "type": "primary"
+          },
+          {
+            "btrfs": [
+              {
+                "mountpoint": "/",
+                "name": "@"
+              },
+              {
+                "mountpoint": "/home",
+                "name": "@home"
+              },
+              {
+                "mountpoint": "/.snapshots",
+                "name": "@snapshots"
+              },
+              {
+                "mountpoint": "/var/log",
+                "name": "@log"
+              },
+              {
+                "mountpoint": "/var/cache/pacman/pkg",
+                "name": "@pkg"
+              },
+              {
+                "mountpoint": "/var/lib/machines",
+                "name": "@machines"
+              }
+            ],
+            "dev_path": null,
+            "flags": [],
+            "fs_type": "btrfs",
+            "mount_options": [
+              "compress=zstd",
+              "noatime",
+              "discard=async",
+              "space_cache=v2"
+            ],
+            "mountpoint": null,
+            "obj_id": null,
+            "size": {
+              "sector_size": {
+                "unit": "B",
+                "value": 512
+              },
+              "unit": "Percent",
+              "value": 100
+            },
+            "start": {
+              "sector_size": {
+                "unit": "B",
+                "value": 512
+              },
+              "unit": "B",
+              "value": 1074790400
+            },
+            "status": "create",
+            "type": "primary"
+          }
+        ],
+        "wipe": true
+      }
+    ]
+  },
+  "packages": [
+    "base-devel",
+    "ghostty",
+    "git",
+    "gnome-keyring",
+    "gnome-text-editor",
+    "micro",
+    "nautilus",
+    "ttf-roboto",
+    "noto-fonts-cjk",
+    "noto-fonts-emoji",
+    "fcitx5",
+    "fcitx5-configtool",
+    "fcitx5-gtk",
+    "fcitx5-qt",
+    "labwc",
+    "xdg-user-dirs",
+    "debootstrap",
+    "debian-archive-keyring"
+  ],
+  "swap": {
+    "algorithm": "zstd",
+    "enabled": true
+  }
+}
