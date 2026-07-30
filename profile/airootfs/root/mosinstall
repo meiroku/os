@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+archinstall --config-url https://raw.githubusercontent.com/meiroku/os/main/config.json
