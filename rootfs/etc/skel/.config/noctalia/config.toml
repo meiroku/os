@@ -1,0 +1,18 @@
+[bar.default]
+margin_ends = 0
+padding = 16
+position = "left"
+radius = 0
+widget_spacing = 10
+
+[shell]
+font_family = "Roboto"
+
+[theme]
+source = "wallpaper"
+
+    [theme.templates]
+    builtin_ids = [ "gtk3", "gtk4", "ghostty", "kcolorscheme", "labwc", "qt" ]
+
+[widget.network]
+show_label = false
