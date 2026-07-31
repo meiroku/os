@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<labwc_config>
+  <mouse>
+    <default />
+    <context name="Root">
+      <mousebind button="Left" action="Press">
+        <action name="None" />
+      </mousebind>
+    </context>
+  </mouse>
+</labwc_config>
