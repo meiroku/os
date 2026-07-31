@@ -1,0 +1,100 @@
+name: Build Meiroku OS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: meiroku-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: bash
+
+    container:
+      image: archlinux:base-devel
+      options: --privileged -v /dev:/dev
+
+    env:
+      WORK_DIR: /tmp/archiso-work
+      OUT_DIR: /tmp/archiso-out
+
+    steps:
+      - name: Initialize pacman and install prerequisites
+        run: |
+          set -euo pipefail
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Su --noconfirm
+          pacman -S --noconfirm --needed git archiso
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Prepare build directories
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK_DIR" "$OUT_DIR"
+
+      - name: Build ISO with archiso
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mkarchiso -v -w "$WORK_DIR" -o "$OUT_DIR" ./profile
+
+      - name: Validate build output
+        id: iso
+        run: |
+          set -euo pipefail
+          ISO_FILE=$(find "$OUT_DIR" -maxdepth 1 -type f -name "*.iso" | sort | head -n 1)
+
+          if [ -z "$ISO_FILE" ]; then
+            echo "ISO file was not generated in $OUT_DIR" >&2
+            exit 1
+          fi
+
+          ISO_NAME=$(basename "$ISO_FILE")
+          SHA_FILE="${ISO_FILE}.sha256"
+
+          cd "$OUT_DIR"
+          sha256sum "$ISO_NAME" > "$SHA_FILE"
+
+          echo "iso_file=$ISO_FILE" >> "$GITHUB_OUTPUT"
+          echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"
+          echo "sha_file=$SHA_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: meiroku-${{ github.run_number }}
+          path: |
+            ${{ steps.iso.outputs.iso_file }}
+            ${{ steps.iso.outputs.sha_file }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}-${{ github.run_id }}
+          target_commitish: ${{ github.sha }}
+          name: Release ${{ steps.iso.outputs.iso_name }}
+          files: |
+            ${{ steps.iso.outputs.iso_file }}
+            ${{ steps.iso.outputs.sha_file }}
+          draft: false
+          prerelease: false
