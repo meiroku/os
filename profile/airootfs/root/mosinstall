@@ -1,2 +1,9 @@
 #!/usr/bin/env bash
-archinstall --config-url https://raw.githubusercontent.com/meiroku/os/main/config.json
+set -euo pipefail
+
+curl -fsSL -o config.json https://raw.githubusercontent.com/meiroku/os/main/config.json
+
+curl -fsSL -o /tmp/pre-install.sh https://raw.githubusercontent.com/meiroku/os/main/scripts/pre-install.sh
+
+bash /tmp/pre-install.sh
+archinstall --config config.json
