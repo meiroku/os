@@ -52,7 +52,9 @@ chmod 440 /etc/sudoers.d/temp_aur
 
 echo "Building and installing yay..."
 rm -rf /tmp/yay-bin
-sudo -u "${TARGET_USER}" -H bash -c "git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin && cd /tmp/yay-bin && makepkg -si --noconfirm"
+git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
+chown -R "${TARGET_UID}:${TARGET_GID}" /tmp/yay-bin
+sudo -u "${TARGET_USER}" -H bash -c "cd /tmp/yay-bin && makepkg -si --noconfirm"
 
 # --- 必須AURパッケージのインストール ---
 echo "Installing AUR packages..."
