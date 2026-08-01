@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== Starting Post-Install Setup ===" > /dev/tty
+echo "=== Starting Post-Install Setup ===" > /dev/tty1
 
 # --- クリーンアップ処理 ---
 cleanup() {
-    echo "Cleaning up temporary files and directories..." > /dev/tty
+    echo "Cleaning up temporary files and directories..." > /dev/tty1
     rm -f /etc/sudoers.d/temp_aur
     rm -rf /tmp/yay-bin
     rm -rf /tmp/meiroku-os
@@ -13,23 +13,23 @@ cleanup() {
 trap cleanup EXIT
 
 # --- 依存パッケージのインストール ---
-echo "Installing required dependencies..." > /dev/tty
+echo "Installing required dependencies..." > /dev/tty1
 pacman -S --noconfirm --needed git base-devel sudo debootstrap debian-archive-keyring rsync curl libeatmydata
 
 # --- ターゲットユーザーの特定 ---
 TARGET_USER=$(id -un 1000 2>/dev/null || ls -1 /home | grep -vw lost+found | head -n 1 || true)
 
 if [ -z "$TARGET_USER" ]; then
-    echo "Error: Target user not found!" > /dev/tty
+    echo "Error: Target user not found!" > /dev/tty1
     exit 1
 fi
 
 TARGET_UID=$(id -u "${TARGET_USER}")
 TARGET_GID=$(id -g "${TARGET_USER}")
-echo "Target User identified as: ${TARGET_USER} (UID: ${TARGET_UID}, GID: ${TARGET_GID})" > /dev/tty
+echo "Target User identified as: ${TARGET_USER} (UID: ${TARGET_UID}, GID: ${TARGET_GID})" > /dev/tty1
 
 # --- カスタムrootfsとskelの適用 ---
-echo "Fetching and applying rootfs and skel..." > /dev/tty
+echo "Fetching and applying rootfs and skel..." > /dev/tty1
 REPO_URL="https://github.com/meiroku/os.git"
 REPO_DIR="/tmp/meiroku-os"
 
@@ -41,23 +41,23 @@ if [ -d "${REPO_DIR}/rootfs" ]; then
     rsync -a "${REPO_DIR}/rootfs/" /
     # skelをユーザー権限でホームディレクトリにコピー
     rsync -a --chown="${TARGET_UID}:${TARGET_GID}" /etc/skel/ "/home/${TARGET_USER}/"
-    echo "rootfs and skel applied successfully." > /dev/tty
+    echo "rootfs and skel applied successfully." > /dev/tty1
 else
-    echo "Warning: rootfs directory not found in the repository." > /dev/tty
+    echo "Warning: rootfs directory not found in the repository." > /dev/tty1
 fi
 
 # --- AURヘルパー (yay) の導入 ---
 echo "${TARGET_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/temp_aur
 chmod 440 /etc/sudoers.d/temp_aur
 
-echo "Building and installing yay..." > /dev/tty
+echo "Building and installing yay..." > /dev/tty1
 rm -rf /tmp/yay-bin
 git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
 chown -R "${TARGET_UID}:${TARGET_GID}" /tmp/yay-bin
 sudo -u "${TARGET_USER}" -H bash -c "cd /tmp/yay-bin && makepkg -si --noconfirm"
 
 # --- 必須AURパッケージのインストール ---
-echo "Installing AUR packages..." > /dev/tty
+echo "Installing AUR packages..." > /dev/tty1
 sudo -u "${TARGET_USER}" -H yay -S --noconfirm --needed noctalia noctalia-greeter
 systemctl enable greetd
 
@@ -66,13 +66,13 @@ printf '%b' \
 '\033[1;33m[IMPORTANT] Starting Debian base system setup (debootstrap).\033[0m\n' \
 '\033[1;33mThis may take a few minutes depending on your network and storage speed.\033[0m\n' \
 '\033[1;31mEven if it appears to be stuck at '\''Unpacking...'\'' , the process is still running.\033[0m\n' \
-'\033[1;31mDo NOT press Ctrl+C or interrupt the process.\033[0m\n\n' > /dev/tty
+'\033[1;31mDo NOT press Ctrl+C or interrupt the process.\033[0m\n\n' > /dev/tty1
 
 DEBIAN_ROOT="/var/lib/machines/debian"
 mkdir -p "${DEBIAN_ROOT}"
-eatmydata debootstrap --variant=minbase --arch=amd64 trixie "${DEBIAN_ROOT}" https://deb.debian.org/debian/ > /dev/tty 2>&1
+eatmydata debootstrap --variant=minbase --arch=amd64 trixie "${DEBIAN_ROOT}" https://deb.debian.org/debian/ > /dev/tty1 2>&1
 
-echo "Creating nspawn config..." > /dev/tty
+echo "Creating nspawn config..." > /dev/tty1
 mkdir -p /etc/systemd/nspawn
 cat << 'EOF' > /etc/systemd/nspawn/debian.nspawn
 [Exec]
@@ -90,7 +90,7 @@ BindReadOnly=/usr/share/icons
 BindReadOnly=/usr/share/themes
 EOF
 
-echo "Configuring Debian container..." > /dev/tty
+echo "Configuring Debian container..." > /dev/tty1
 CHROOT_CMD=(chroot "${DEBIAN_ROOT}")
 
 # Debian側のパッケージをインストール
@@ -106,7 +106,7 @@ ARCH_VIDEO_GID=$(getent group video | cut -d: -f3 || echo "")
 ARCH_AUDIO_GID=$(getent group audio | cut -d: -f3 || echo "")
 ARCH_RENDER_GID=$(getent group render | cut -d: -f3 || echo "")
 
-echo "Syncing hardware access groups to Debian container..." > /dev/tty
+echo "Syncing hardware access groups to Debian container..." > /dev/tty1
 if [ -n "$ARCH_VIDEO_GID" ]; then
     "${CHROOT_CMD[@]}" /usr/sbin/groupadd -g "$ARCH_VIDEO_GID" -o arch_video || true
     "${CHROOT_CMD[@]}" /usr/sbin/usermod -aG arch_video "${TARGET_USER}"
@@ -127,13 +127,13 @@ systemctl enable machines.target
 systemctl enable systemd-nspawn@debian.service
 
 # --- カスタム apt ラッパースクリプトのセットアップ ---
-echo "Setting up apt wrapper script..." > /dev/tty
+echo "Setting up apt wrapper script..." > /dev/tty1
 if [ -f /usr/local/bin/apt ]; then
     chmod +x /usr/local/bin/apt
 else
-    echo "Warning: apt wrapper not found in rootfs. Downloading directly..." > /dev/tty
+    echo "Warning: apt wrapper not found in rootfs. Downloading directly..." > /dev/tty1
     curl -sL https://raw.githubusercontent.com/meiroku/os/main/rootfs/usr/local/bin/apt > /usr/local/bin/apt
     chmod +x /usr/local/bin/apt
 fi
 
-echo "=== Post-Install Setup Completed Successfully ===" > /dev/tty
+echo "=== Post-Install Setup Completed Successfully ===" > /dev/tty1
