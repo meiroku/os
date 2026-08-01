@@ -14,7 +14,7 @@ trap cleanup EXIT
 
 # --- 依存パッケージのインストール ---
 echo "Installing required dependencies..."
-pacman -S --noconfirm --needed git base-devel sudo debootstrap debian-archive-keyring rsync curl
+pacman -S --noconfirm --needed git base-devel sudo debootstrap debian-archive-keyring rsync curl libeatmydata
 
 # --- ターゲットユーザーの特定 ---
 TARGET_USER=$(id -un 1000 2>/dev/null || ls -1 /home | grep -vw lost+found | head -n 1 || true)
@@ -70,7 +70,7 @@ printf '%b' \
 
 DEBIAN_ROOT="/var/lib/machines/debian"
 mkdir -p "${DEBIAN_ROOT}"
-debootstrap --arch=amd64 trixie "${DEBIAN_ROOT}" https://deb.debian.org/debian/
+eatmydata debootstrap --variant=minbase --arch=amd64 trixie "${DEBIAN_ROOT}" https://deb.debian.org/debian/
 
 echo "Creating nspawn config..."
 mkdir -p /etc/systemd/nspawn
