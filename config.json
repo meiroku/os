@@ -8,7 +8,7 @@
         "type": "Snapper"
       }
     },
-    "config_type": "default_layout",
+    "config_type": "manual_partitioning",
     "device_modifications": [
       {
         "device": null,
@@ -79,15 +79,15 @@
               "discard=async",
               "space_cache=v2"
             ],
-            "mountpoint": null,
+            "mountpoint": "/",
             "obj_id": null,
             "size": {
               "sector_size": {
                 "unit": "B",
                 "value": 512
               },
-              "unit": "Percent",
-              "value": 100
+              "unit": "B",
+              "value": null
             },
             "start": {
               "sector_size": {
