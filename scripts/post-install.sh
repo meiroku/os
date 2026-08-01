@@ -79,6 +79,9 @@ cat << 'EOF' > /etc/systemd/nspawn/debian.nspawn
 Boot=yes
 PrivateUsers=no
 
+[Network]
+VirtualEthernet=no
+
 [Files]
 Bind=/home
 Bind=/run/user
@@ -92,6 +95,9 @@ EOF
 
 echo "Configuring Debian container..." > /dev/tty1
 CHROOT_CMD=(chroot "${DEBIAN_ROOT}")
+
+# ホストのDNS設定をコピー
+cp /etc/resolv.conf "${DEBIAN_ROOT}/etc/resolv.conf"
 
 # Debian側のパッケージをインストール
 "${CHROOT_CMD[@]}" apt-get update
@@ -120,7 +126,18 @@ if [ -n "$ARCH_RENDER_GID" ]; then
     "${CHROOT_CMD[@]}" /usr/sbin/usermod -aG arch_render "${TARGET_USER}"
 fi
 # Debian本来のsudoグループ等へも追加
-"${CHROOT_CMD[@]}" /usr/sbin/usermod -aG sudo "${TARGET_USER}"
+"${CHROOT_CMD[@]}" /usr/sbin/usermod -M -s /usr/bin/bash -u "${TARGET_UID}" "${TARGET_USER}"
+
+# Arch側のパスワードハッシュを取得してDebianに同期
+ARCH_SHADOW_HASH=$(sudo grep "^${TARGET_USER}:" /etc/shadow | cut -d: -f2 || true)
+
+if [ -n "$ARCH_SHADOW_HASH" ] && [ "$ARCH_SHADOW_HASH" != "!" ] && [ "$ARCH_SHADOW_HASH" != "*" ]; then
+    echo "Syncing password hash to Debian container..." > /dev/tty1
+    "${CHROOT_CMD[@]}" /usr/sbin/usermod -p "$ARCH_SHADOW_HASH" "${TARGET_USER}"
+else
+    echo "${TARGET_USER}:debian" | "${CHROOT_CMD[@]}" /usr/sbin/chpasswd
+    echo "Warning: Password sync failed. Default password set to 'debian'." > /dev/tty1
+fi
 
 # コンテナサービスの有効化
 systemctl enable machines.target
