@@ -58,7 +58,7 @@ sudo -u "${TARGET_USER}" -H bash -c "cd /tmp/yay-bin && makepkg -si --noconfirm"
 
 # --- 必須AURパッケージのインストール ---
 echo "Installing AUR packages..." > /dev/tty1
-sudo -u "${TARGET_USER}" -H yay -S --noconfirm --needed noctalia noctalia-greeter
+sudo -u "${TARGET_USER}" -H yay -S --noconfirm --needed noctalia noctalia-greeter > /dev/tty1 2>&1
 systemctl enable greetd
 
 # --- Debian debootstrap とコンテナ設定 ---
