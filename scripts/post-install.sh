@@ -98,7 +98,7 @@ CHROOT_CMD=(chroot "${DEBIAN_ROOT}")
 "${CHROOT_CMD[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y wget curl gnupg ca-certificates sudo libgl1-mesa-dri libwayland-client0 libwayland-egl1 mesa-utils
 
 # ユーザー作成
-"${CHROOT_CMD[@]}" useradd -M -s /bin/bash -u "${TARGET_UID}" "${TARGET_USER}"
+"${CHROOT_CMD[@]}" /usr/sbin/useradd -M -s /bin/bash -u "${TARGET_UID}" "${TARGET_USER}"
 
 # --- GIDの同期 ---
 # Arch側でのグループIDを取得
@@ -108,19 +108,19 @@ ARCH_RENDER_GID=$(getent group render | cut -d: -f3 || echo "")
 
 echo "Syncing hardware access groups to Debian container..." > /dev/tty
 if [ -n "$ARCH_VIDEO_GID" ]; then
-    "${CHROOT_CMD[@]}" groupadd -g "$ARCH_VIDEO_GID" -o arch_video || true
-    "${CHROOT_CMD[@]}" usermod -aG arch_video "${TARGET_USER}"
+    "${CHROOT_CMD[@]}" /usr/sbin/groupadd -g "$ARCH_VIDEO_GID" -o arch_video || true
+    "${CHROOT_CMD[@]}" /usr/sbin/usermod -aG arch_video "${TARGET_USER}"
 fi
 if [ -n "$ARCH_AUDIO_GID" ]; then
-    "${CHROOT_CMD[@]}" groupadd -g "$ARCH_AUDIO_GID" -o arch_audio || true
-    "${CHROOT_CMD[@]}" usermod -aG arch_audio "${TARGET_USER}"
+    "${CHROOT_CMD[@]}" /usr/sbin/groupadd -g "$ARCH_AUDIO_GID" -o arch_audio || true
+    "${CHROOT_CMD[@]}" /usr/sbin/usermod -aG arch_audio "${TARGET_USER}"
 fi
 if [ -n "$ARCH_RENDER_GID" ]; then
-    "${CHROOT_CMD[@]}" groupadd -g "$ARCH_RENDER_GID" -o arch_render || true
-    "${CHROOT_CMD[@]}" usermod -aG arch_render "${TARGET_USER}"
+    "${CHROOT_CMD[@]}" /usr/sbin/groupadd -g "$ARCH_RENDER_GID" -o arch_render || true
+    "${CHROOT_CMD[@]}" /usr/sbin/usermod -aG arch_render "${TARGET_USER}"
 fi
 # Debian本来のsudoグループ等へも追加
-"${CHROOT_CMD[@]}" usermod -aG sudo "${TARGET_USER}"
+"${CHROOT_CMD[@]}" /usr/sbin/usermod -aG sudo "${TARGET_USER}"
 
 # コンテナサービスの有効化
 systemctl enable machines.target
