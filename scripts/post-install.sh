@@ -85,9 +85,9 @@ Bind=/run/user
 Bind=/tmp/.X11-unix
 Bind=/dev/dri
 Bind=/dev/shm
-BindReadOnly=/usr/share/fonts
-BindReadOnly=/usr/share/icons
-BindReadOnly=/usr/share/themes
+BindReadOnly=/usr/share/fonts:/usr/local/share/fonts
+BindReadOnly=/usr/share/icons:/usr/local/share/icons
+BindReadOnly=/usr/share/themes:/usr/local/share/themes
 EOF
 
 echo "Configuring Debian container..." > /dev/tty1
