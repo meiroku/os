@@ -258,9 +258,6 @@ def main() -> None:
     cmd = []
 
     if os.geteuid() != 0:
-        if not sys.stdout.isatty() and shutil.which("pkexec"):
-            cmd.append("pkexec")
-        else:
             cmd.append("sudo")
 
     cmd.extend([
