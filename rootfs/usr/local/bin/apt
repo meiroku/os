@@ -179,6 +179,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
 import sys
 
 MACHINE = {machine_repr}
@@ -252,21 +253,32 @@ def main() -> None:
 
     wayland = os.environ.get("WAYLAND_DISPLAY", "")
     display = os.environ.get("DISPLAY", "")
+    xauthority = os.environ.get("XAUTHORITY", "")
 
-    cmd = [
+    cmd = []
+
+    if os.getuuid() != 0:
+        if not sys.stdout.isatty() and shutil.which("pkexec"):
+            cmd.append("pkexec")
+        else:
+            cmd.append("sudo")
+
+    cmd.extend([
         "systemd-run",
         "-M", MACHINE,
         "--quiet",
         "--pipe",
         "--wait",
-        f"--uid={{TARGET_UID}}",
-        f"--setenv=XDG_RUNTIME_DIR=/run/user/{{TARGET_UID}}",
-    ]
+        f"--uid={TARGET_UID}",
+        f"--setenv=XDG_RUNTIME_DIR=/run/user/{TARGET_UID}",
+    ])
     
     if wayland:
         cmd.append(f"--setenv=WAYLAND_DISPLAY={{wayland}}")
     if display:
         cmd.append(f"--setenv=DISPLAY={{display}}")
+    if xauthority:
+        cmd.append(f"--setenv=XAUTHORITY={{xauthority}}")
 
     cmd.extend([
         "--",
