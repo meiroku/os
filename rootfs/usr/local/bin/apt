@@ -341,9 +341,9 @@ def rewrite_desktop_file(
     if not seen_name:
         out = insert_after_desktop_entry(out, f"Name=[{machine_name.capitalize()}] {display_name}\n")
     if not seen_exec:
-        out = insert_after_desktop_entry(out, f"Exec={wrapper_path} %U\n")
+        out = insert_after_desktop_entry(out, f"Exec={quoted_wrapper} %U\n")
     if not seen_tryexec:
-        out = insert_after_desktop_entry(out, f"TryExec={wrapper_path}\n")
+        out = insert_after_desktop_entry(out, f"TryExec={quoted_wrapper}\n")
 
     desktop_path.write_text("".join(out), encoding="utf-8")
 
