@@ -77,6 +77,7 @@ PrivateUsers=no
 
 [Network]
 VirtualEthernet=no
+ResolvConf=bind-host
 
 [Files]
 Bind=/home
