@@ -122,7 +122,7 @@ if [ -n "$ARCH_RENDER_GID" ]; then
     "${CHROOT_CMD[@]}" /usr/sbin/usermod -aG arch_render "${TARGET_USER}"
 fi
 # Debian本来のsudoグループ等へも追加
-"${CHROOT_CMD[@]}" /usr/sbin/usermod -M -s /usr/bin/bash -u "${TARGET_UID}" "${TARGET_USER}"
+"${CHROOT_CMD[@]}" /usr/sbin/usermod -aG sudo -s /usr/bin/bash -u "${TARGET_UID}" "${TARGET_USER}"
 
 # Arch側のパスワードハッシュを取得してDebianに同期
 ARCH_SHADOW_HASH=$(sudo grep "^${TARGET_USER}:" /etc/shadow | cut -d: -f2 || true)
