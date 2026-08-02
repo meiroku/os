@@ -71,7 +71,7 @@ def resolve_target_gid [user: string] {
 }
 
 def sanitize_slug [text: string] {
-    let s = ($text | str lower
+    let s = ($text | str lowercase
                    | str replace -a ' ' '-'
                    | str replace -a '/' '-'
                    | str replace -r -a '[^a-z0-9._-]+' '-'
@@ -140,21 +140,21 @@ def iter_desktop_files [] {
 }
 
 def find_desktop_file [app_name: string] {
-    let needle = ($app_name | str lower)
+    let needle = ($app_name | str lowercase)
     mut exact_matches = []
     mut partial_matches = []
 
     for path in (iter_desktop_files) {
-        let stem = ($path | path parse | get stem | str lower)
-        let name = ($path | path basename | str lower)
-        let rel = ($path | str replace (container_root) "" | str lower)
+        let stem = ($path | path parse | get stem | str lowercase)
+        let name = ($path | path basename | str lowercase)
+        let rel = ($path | str replace (container_root) "" | str lowercase)
 
         if $stem == $needle or $name == $"($needle).desktop" {
             $exact_matches = ($exact_matches | append $path)
             continue
         }
 
-        if ($stem | str contains $needle) or ($name | str contains $needle) or ($rel | str contains $needle) {
+        if ($needle in $stem) or ($needle in $name) or ($needle in $rel) {
             $partial_matches = ($partial_matches | append $path)
             continue
         }
@@ -227,12 +227,12 @@ def expand_exec [tokens: list<string>, args: list<string>] {
         if $token == "%%" {
             $out = ($out | append "%")
         } else if $token == "%c" {
-            $out = ($out | append DISPLAY_NAME)
+            $out = ($out | append $DISPLAY_NAME)
         } else if $token == "%k" {
-            $out = ($out | append DESKTOP_FILE)
+            $out = ($out | append #DESKTOP_FILE)
         } else if $token == "%i" {
-            if (ORIG_ICON | is-not-empty) {
-                $out = ($out | append ["--icon", ORIG_ICON])
+            if ($ORIG_ICON | is-not-empty) {
+                $out = ($out | append ["--icon", $ORIG_ICON])
             }
         } else if $token in ["%f", "%u"] {
             if ($args | is-not-empty) {
@@ -240,13 +240,13 @@ def expand_exec [tokens: list<string>, args: list<string>] {
             }
         } else if $token in ["%F", "%U"] {
             $out = ($out | append $args)
-        } else if ($token | str contains "%") {
+        } else if ("%" in $token) {
             mut repl = ($token | str replace -a "%%" "%"
-                               | str replace -a "%c" DISPLAY_NAME
-                               | str replace -a "%k" DESKTOP_FILE)
+                               | str replace -a "%c" $DISPLAY_NAME
+                               | str replace -a "%k" #DESKTOP_FILE)
 
-            let has_single = ($repl | str contains "%f") or ($repl | str contains "%u")
-            let has_multi = ($repl | str contains "%F") or ($repl | str contains "%U")
+            let has_single = ("%f" in $repl) or ("%u" in $repl)
+            let has_multi = ("%F" in $repl) or ("%U" in $repl)
 
             if $has_single {
                 let val = if ($args | is-empty) { "" } else { $args | first }
@@ -270,7 +270,7 @@ def expand_exec [tokens: list<string>, args: list<string>] {
 }
 
 def main [...args: string] {
-    let tokens = (parse_exec ORIG_EXEC)
+    let tokens = (parse_exec $ORIG_EXEC)
     let final_cmd = (expand_exec $tokens $args)
 
     if ($final_cmd | is-empty) {
@@ -295,24 +295,21 @@ def main [...args: string] {
         "--quiet",
         "--pipe",
         "--wait",
-        $"--uid=(TARGET_UID)",
-        $"--setenv=XDG_RUNTIME_DIR=/run/user/(TARGET_UID)"
-    ] | flatten)
+        $"--uid=($TARGET_UID)",
+        $"--setenv=XDG_RUNTIME_DIR=/run/user/($TARGET_UID)"
+    ])
     
     if ($wayland | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=WAYLAND_DISPLAY=($wayland)")
+        $cmd = ($cmd | append $"--setenv=$WAYLAND_DISPLAY=($wayland)")
     }
     if ($display | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=DISPLAY=($display)")
+        $cmd = ($cmd | append $"--setenv=$DISPLAY=($display)")
     }
     if ($xauthority | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=XAUTHORITY=($xauthority)")
+        $cmd = ($cmd | append $"--setenv=$XAUTHORITY=($xauthority)")
     }
 
-    $cmd = ($cmd | append [
-        "--",
-        "/usr/bin/env"
-    ] | append $final_cmd | flatten)
+$cmd = ($cmd | append ["--", "/usr/bin/env"] | append $final_cmd | flatten)
 
     let exe = ($cmd | first)
     let exec_args = ($cmd | skip 1)
@@ -338,7 +335,7 @@ def rewrite_desktop_file [
     mut seen_exec = false
     mut seen_tryexec = false
 
-    let quoted_wrapper = $"\'($wrapper_path | str replace -a \"'\" \"'\\\"'\\\"'\")\'"
+    let quoted_wrapper = $"\"($wrapper_path)\""
 
     for line in $lines {
         if ($line | str starts-with "Name=") or ($line | str starts-with "Name[") {
@@ -462,7 +459,7 @@ def unexport_app [app_name: string] {
     let wrapper_dir = ($target_home | path join ".local" "bin")
 
     let m_name = (machine_name)
-    let needle = ($app_name | str lower)
+    let needle = ($app_name | str lowercase)
 
     if not ($desktop_dir | path exists) {
         print -e $"Error: Desktop directory does not exist: ($desktop_dir)"
@@ -474,8 +471,8 @@ def unexport_app [app_name: string] {
     mut matched_desktops = []
 
     for f in $desktop_files {
-        let name = ($f | path basename | str lower)
-        if ($name | str contains $needle) {
+        let name = ($f | path basename | str lowercase)
+        if ($needle in $name) {
             $matched_desktops = ($matched_desktops | append $f)
         }
     }
