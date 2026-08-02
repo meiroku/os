@@ -71,7 +71,7 @@ def resolve_target_gid [user: string] {
 }
 
 def sanitize_slug [text: string] {
-    let s = ($text | str downcase
+    let s = ($text | str lower
                    | str replace -a ' ' '-'
                    | str replace -a '/' '-'
                    | str replace -r -a '[^a-z0-9._-]+' '-'
@@ -140,21 +140,21 @@ def iter_desktop_files [] {
 }
 
 def find_desktop_file [app_name: string] {
-    let needle = ($app_name | str downcase)
+    let needle = ($app_name | str lower)
     mut exact_matches = []
     mut partial_matches = []
 
     for path in (iter_desktop_files) {
-        let stem = ($path | path parse | get stem | str downcase)
-        let name = ($path | path basename | str downcase)
-        let rel = ($path | str replace (container_root) "" | str downcase)
+        let stem = ($path | path parse | get stem | str lower)
+        let name = ($path | path basename | str lower)
+        let rel = ($path | str replace (container_root) "" | str lower)
 
         if $stem == $needle or $name == $"($needle).desktop" {
             $exact_matches = ($exact_matches | append $path)
             continue
         }
 
-        if ($needle in $stem) or ($needle in $name) or ($needle in $rel) {
+        if ($stem | str contains $needle) or ($name | str contains $needle) or ($rel | str contains $needle) {
             $partial_matches = ($partial_matches | append $path)
             continue
         }
@@ -194,7 +194,7 @@ const ORIG_ICON = ($oi_repr)
 const ORIG_EXEC = ($oe_repr)
 "
 
-    let body = r#"
+    let body = r#'
 def parse_exec [exec_str: string] {
     mut tokens = []
     mut current_token = ""
@@ -240,13 +240,13 @@ def expand_exec [tokens: list<string>, args: list<string>] {
             }
         } else if $token in ["%F", "%U"] {
             $out = ($out | append $args)
-        } else if ("%" in $token) {
+        } else if ($token | str contains "%") {
             mut repl = ($token | str replace -a "%%" "%"
                                | str replace -a "%c" DISPLAY_NAME
                                | str replace -a "%k" DESKTOP_FILE)
 
-            let has_single = ("%f" in $repl) or ("%u" in $repl)
-            let has_multi = ("%F" in $repl) or ("%U" in $repl)
+            let has_single = ($repl | str contains "%f") or ($repl | str contains "%u")
+            let has_multi = ($repl | str contains "%F") or ($repl | str contains "%U")
 
             if $has_single {
                 let val = if ($args | is-empty) { "" } else { $args | first }
@@ -297,7 +297,7 @@ def main [...args: string] {
         "--wait",
         $"--uid=(TARGET_UID)",
         $"--setenv=XDG_RUNTIME_DIR=/run/user/(TARGET_UID)"
-    ])
+    ] | flatten)
     
     if ($wayland | is-not-empty) {
         $cmd = ($cmd | append $"--setenv=WAYLAND_DISPLAY=($wayland)")
@@ -312,14 +312,14 @@ def main [...args: string] {
     $cmd = ($cmd | append [
         "--",
         "/usr/bin/env"
-    ] | append $final_cmd)
+    ] | append $final_cmd | flatten)
 
     let exe = ($cmd | first)
     let exec_args = ($cmd | skip 1)
     
     exec $exe ...$exec_args
 }
-"#
+'#
     $head + $body
 }
 
@@ -462,7 +462,7 @@ def unexport_app [app_name: string] {
     let wrapper_dir = ($target_home | path join ".local" "bin")
 
     let m_name = (machine_name)
-    let needle = ($app_name | str downcase)
+    let needle = ($app_name | str lower)
 
     if not ($desktop_dir | path exists) {
         print -e $"Error: Desktop directory does not exist: ($desktop_dir)"
@@ -474,8 +474,8 @@ def unexport_app [app_name: string] {
     mut matched_desktops = []
 
     for f in $desktop_files {
-        let name = ($f | path basename | str downcase)
-        if ($needle in $name) {
+        let name = ($f | path basename | str lower)
+        if ($name | str contains $needle) {
             $matched_desktops = ($matched_desktops | append $f)
         }
     }
