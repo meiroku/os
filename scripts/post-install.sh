@@ -62,11 +62,7 @@ sudo -u "${TARGET_USER}" -H yay -S --noconfirm --needed noctalia noctalia-greete
 systemctl enable greetd
 
 # --- Debian debootstrap とコンテナ設定 ---
-printf '%b' \
-'\033[1;33m[IMPORTANT] Starting Debian base system setup (debootstrap).\033[0m\n' \
-'\033[1;33mThis may take a few minutes depending on your network and storage speed.\033[0m\n' \
-'\033[1;31mEven if it appears to be stuck at '\''Unpacking...'\'' , the process is still running.\033[0m\n' \
-'\033[1;31mDo NOT press Ctrl+C or interrupt the process.\033[0m\n\n' > /dev/tty1
+echo "Setting up Debian debootstrap..." > /dev/tty1
 
 DEBIAN_ROOT="/var/lib/machines/debian"
 mkdir -p "${DEBIAN_ROOT}"
