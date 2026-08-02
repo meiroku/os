@@ -297,6 +297,8 @@ def rewrite_desktop_file(
     seen_exec = False
     seen_tryexec = False
 
+    quoted_wrapper = shlex.quote(str(wrapper_path))
+
     for line in lines:
         if line.startswith("Name=") or line.startswith("Name["):
             if not seen_name:
@@ -305,12 +307,12 @@ def rewrite_desktop_file(
             continue
 
         if line.startswith("Exec="):
-            out.append(f"Exec={wrapper_path} %U\n")
+            out.append(f"Exec={quoted_wrapper} %U\n")
             seen_exec = True
             continue
 
         if line.startswith("TryExec="):
-            out.append(f"TryExec={wrapper_path}\n")
+            out.append(f"TryExec={quoted_wrapper}\n")
             seen_tryexec = True
             continue
 
