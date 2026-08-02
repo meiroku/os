@@ -269,8 +269,8 @@ def main() -> None:
         "--quiet",
         "--pipe",
         "--wait",
-        f"--uid={TARGET_UID}",
-        f"--setenv=XDG_RUNTIME_DIR=/run/user/{TARGET_UID}",
+        f"--uid={{TARGET_UID}}",
+        f"--setenv=XDG_RUNTIME_DIR=/run/user/{{TARGET_UID}}",
     ])
     
     if wayland:
