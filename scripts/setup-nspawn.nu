@@ -43,7 +43,7 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
 
     log-tty "Configuring Debian container..."
     
-    def in-chroot [...args: string] {
+    def --wrapped in-chroot [...args: string] {
         let input = $in
         if ($input | is-empty) {
             ^chroot $debian_root ...$args
