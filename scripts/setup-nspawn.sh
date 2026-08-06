@@ -202,7 +202,7 @@ log_info "Configuring container user..."
 if ! in_nspawn getent passwd "$TARGET_USER" >/dev/null 2>&1; then
     in_nspawn useradd -m -U -s /bin/bash -u "$TARGET_UID" "$TARGET_USER"
     in_nspawn cp -rnT /etc/skel "/home/${TARGET_USER}"
-    in_nspawn chown -R "${TARGET_USER}:${TARGET_USER}" "/home/${TARGET_USER}"
+    in_nspawn bash -c "chown -R '${TARGET_USER}:${TARGET_USER}' '/home/${TARGET_USER}' 2>/dev/null || true"
 else
     log_info "User '${TARGET_USER}' already exists in container."
 fi
