@@ -98,6 +98,7 @@ if [[ ! -f "$DEBIAN_ROOT/etc/debian_version" ]]; then
     debootstrap \
         --variant=minbase \
         --arch="$HOST_ARCH" \
+        --no-check-gpg \
         "$DEBIAN_RELEASE" \
         "$DEBIAN_ROOT" \
         "$DEBIAN_MIRROR"
@@ -109,7 +110,6 @@ fi
 log_info "Generating nspawn config..."
 install -d -m 0755 /etc/systemd/nspawn
 
-# RestrictAddressFamilies を追加し、ネットワーク系の警告を解消
 cat > "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn" <<EOF
 [Exec]
 Boot=yes
@@ -121,21 +121,33 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 VirtualEthernet=no
 
 [Files]
-Bind=-/run/user/${TARGET_UID}
-Bind=-/tmp/.X11-unix
-Bind=-/dev/dri
-Bind=-/dev/shm
-Bind=-/dev/snd
-Bind=-/dev/input
-BindReadOnly=-/run/dbus/system_bus_socket
-BindReadOnly=-/etc/machine-id
-BindReadOnly=-/etc/localtime
-BindReadOnly=-/usr/share/fonts
-BindReadOnly=-/usr/share/icons
-BindReadOnly=-/usr/share/themes
 EOF
 
-# 存在しない場合のエラーを避けるため、ホスト側に存在する場合のみ設定を追加し、コンテナ側にもマウントポイントを事前作成する
+append_bind() {
+    local src="$1"
+    local readonly_flag="${2:-0}"
+    if [[ -e "$src" ]]; then
+        if (( readonly_flag == 1 )); then
+            echo "BindReadOnly=${src}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+        else
+            echo "Bind=${src}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+        fi
+    fi
+}
+
+append_bind "/run/user/${TARGET_UID}" 0
+append_bind "/tmp/.X11-unix" 0
+append_bind "/dev/dri" 0
+append_bind "/dev/shm" 0
+append_bind "/dev/snd" 0
+append_bind "/dev/input" 0
+append_bind "/run/dbus/system_bus_socket" 1
+append_bind "/etc/machine-id" 1
+append_bind "/etc/localtime" 1
+append_bind "/usr/share/fonts" 1
+append_bind "/usr/share/icons" 1
+append_bind "/usr/share/themes" 1
+
 if [[ -f "${TARGET_HOME}/.Xauthority" ]]; then
     echo "BindReadOnly=${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
     mkdir -p "${DEBIAN_ROOT}/home/${TARGET_USER}"
