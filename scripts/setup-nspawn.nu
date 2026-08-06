@@ -5,18 +5,14 @@ def main [] {
     let target_uid = (^id -u $target_user | str trim)
     let debian_root = "/var/lib/machines/debian"
 
-    def log-tty [msg: string] {
-        $"($msg)\n" | save --append /dev/tty1
-    }
-
-    log-tty "Setting up Debian debootstrap..."
+    print $"(ansi green)Setting up Debian debootstrap...(ansi reset)"
     if not ($debian_root | path exists) {
         mkdir $debian_root
     }
     
-    ^eatmydata debootstrap --variant=minbase --arch=amd64 trixie $debian_root "https://deb.debian.org/debian/" o+e> /dev/tty1
+    ^debootstrap --variant=minbase --arch=amd64 trixie $debian_root "https://deb.debian.org/debian/"
 
-    log-tty "Creating nspawn config..."
+    print $"(ansi green)Creating nspawn config...(ansi reset)"
     if not ("/etc/systemd/nspawn" | path exists) {
         mkdir /etc/systemd/nspawn
     }
@@ -41,7 +37,7 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
 "
     $nspawn_config | save --force /etc/systemd/nspawn/debian.nspawn
 
-    log-tty "Configuring Debian container..."
+    print $"(ansi green)Configuring Debian container...(ansi reset)"
     
     def --wrapped in-chroot [...args: string] {
         let input = $in
@@ -62,19 +58,14 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
 
     in-chroot /usr/sbin/useradd -M -s /bin/bash -u $target_uid $target_user
 
-    log-tty "Syncing hardware access groups to Debian container..."
+    print $"(ansi green)Syncing hardware access groups to Debian container...(ansi reset)"
     
     def get-gid [group_name: string] {
-        try {
-            open --raw /etc/group 
-            | lines 
-            | split column ":" name pwd gid users 
-            | where name == $group_name 
-            | first 
-            | get gid
-        } catch {
-            null
-        }
+        open --raw /etc/group 
+        | lines 
+        | split column ":" name pwd gid users 
+        | where name == $group_name 
+        | get -i 0.gid
     }
 
     let sync_groups = [
@@ -93,25 +84,25 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
 
     in-chroot /usr/sbin/usermod -aG sudo -s /bin/bash -u $target_uid $target_user
 
-    let arch_shadow_hash = (try {
+    let arch_shadow_hash = (
         open --raw /etc/shadow
         | lines 
         | split column ":" name hash rest 
         | where name == $target_user 
-        | first
-        | get hash
-    } catch {
-        null
-    })
+        | get -i 0.hash
+    )
 
     if not ($arch_shadow_hash | is-empty) and ($arch_shadow_hash != "!") and ($arch_shadow_hash != "*") {
-        log-tty "Syncing password hash to Debian container..."
+        print $"(ansi green)Syncing password hash to Debian container...(ansi reset)"
         in-chroot /usr/sbin/usermod -p $arch_shadow_hash $target_user
     } else {
         $"($target_user):debian\n" | in-chroot /usr/sbin/chpasswd
-        log-tty "Warning: Password sync failed. Default password set to 'debian'."
+        print $"(ansi yellow)Warning: Password sync failed. Default password set to 'debian'.(ansi reset)"
     }
 
+    print $"(ansi green)Enabling systemd services...(ansi reset)"
     ^systemctl enable machines.target
     ^systemctl enable systemd-nspawn@debian.service
+
+    print $"(ansi green)Debian container setup completed successfully!(ansi reset)"
 }
