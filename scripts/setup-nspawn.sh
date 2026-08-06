@@ -113,10 +113,10 @@ cat > "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn" <<EOF
 [Exec]
 Boot=yes
 PrivateUsers=no
+ResolvConf=bind-host
 
 [Network]
 VirtualEthernet=no
-ResolvConf=bind-host
 
 [Files]
 Bind=-/run/user/${TARGET_UID}
