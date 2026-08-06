@@ -13,7 +13,8 @@ def log-error [msg: string] {
 }
 
 def main [] {
-    if (^id -u | str trim) != "0" {
+    let current_uid = (^id -u | str trim)
+    if $current_uid != "0" {
         log-error "This script must be run as root."
         exit 1
     }
@@ -32,7 +33,8 @@ def main [] {
     let target_uid = (^id -u $target_user | str trim)
     let debian_root = "/var/lib/machines/debian"
 
-    log-info $"Target user: ($target_user), (UID: ($target_uid))"
+    # [修正1] 文字列補間内の () はコマンド評価と見なされるため、[] に変更
+    log-info $"Target user: ($target_user), [UID: ($target_uid)]"
     log-info $"Container root: ($debian_root)"
 
     if not ($debian_root | path exists) {
@@ -85,20 +87,23 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
     in-nspawn apt-get install -y systemd systemd-sysv wget curl gnupg ca-certificates sudo libgl1-mesa-dri libwayland-client0 libwayland-egl1 mesa-utils mesa-vulkan-drivers libvulkan1 xwayland libpulse0 pipewire-alsa dbus-user-session
 
     log-info "Configuring container user..."
-    let user_exists = (in-nspawn getent passwd $target_user | complete | get exit_code) == 0
-    if not $user_exists {
+    # [修正2] completeの結果をいったん変数に入れて確実に判定する
+    let user_exists_res = (in-nspawn getent passwd $target_user | complete)
+    if $user_exists_res.exit_code != 0 {
         in-nspawn /usr/sbin/useradd -m -s /bin/bash -u $target_uid $target_user
     } else {
         log-info $"User ($target_user) already exists in container."
     }
 
     log-info "Syncing group IDs from host..."
+    # [修正3] ファイルのパースは脆いため、確実な getent コマンドを使用
     def get-host-gid [group_name: string] {
-        open /etc/group 
-        | lines 
-        | parse "{name}:{pwd}:{gid}:{users}"
-        | where name == $group_name 
-        | get 0?.gid?
+        let res = (^getent group $group_name | complete)
+        if $res.exit_code == 0 {
+            $res.stdout | str trim | split row ":" | get 2
+        } else {
+            null
+        }
     }
 
     let groups = ["video", "audio", "render", "input"]
@@ -107,8 +112,8 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
         let gid = (get-host-gid $grp)
         if ($gid != null) {
             log-info $"Syncing group ($grp) to GID ($gid)..."
-            let group_exists = (in-nspawn getent group $grp | complete | get exit_code) == 0
-            if $group_exists {
+            let group_exists_res = (in-nspawn getent group $grp | complete)
+            if $group_exists_res.exit_code == 0 {
                 try { in-nspawn /usr/sbin/groupmod -g $gid $grp }
             } else {
                 try { in-nspawn /usr/sbin/groupadd -g $gid $grp }
@@ -122,16 +127,18 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
     in-nspawn /usr/sbin/usermod -aG sudo $target_user
 
     log-info "Syncing user password from host..."
-    let arch_shadow_hash = (
-        open /etc/shadow
-        | lines 
-        | parse "{name}:{hash}:{rest}"
-        | where name == $target_user 
-        | get 0?.hash?
+    # [修正4] 同様にシャドウパスワードも getent shadow を用いて安全に取得
+    let host_shadow_hash = (
+        let res = (^getent shadow $target_user | complete)
+        if $res.exit_code == 0 {
+            $res.stdout | str trim | split row ":" | get 1
+        } else {
+            null
+        }
     )
 
-    if ($arch_shadow_hash != null) and ($arch_shadow_hash != "!") and ($arch_shadow_hash != "*") {
-        in-nspawn /usr/sbin/usermod -p $arch_shadow_hash $target_user
+    if ($host_shadow_hash != null) and ($host_shadow_hash != "!") and ($host_shadow_hash != "*") {
+        in-nspawn /usr/sbin/usermod -p $host_shadow_hash $target_user
     } else {
         log-warn "Could not retrieve valid hash from host. Setting default password 'debian'."
         $"($target_user):debian\n" | in-nspawn /usr/sbin/chpasswd
