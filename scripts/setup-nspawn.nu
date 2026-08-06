@@ -1,7 +1,7 @@
 #!/usr/bin/env nu
 
 def main [] {
-    let target_user = (if ("SUDO_USER" in $env) { $env.SUDO_USER } else { $env.USER })
+    let target_user = if ("SUDO_USER" in $env) { $env.SUDO_USER } else { $env.USER }
     let target_uid = (^id -u $target_user | str trim)
     let debian_root = "/var/lib/machines/debian"
 
@@ -45,7 +45,7 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
     
     def in-chroot [...args: string] {
         let input = $in
-        if ($input == null) {
+        if ($input | is-empty) {
             ^chroot $debian_root ...$args
         } else {
             $input | ^chroot $debian_root ...$args
@@ -66,12 +66,12 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
     
     def get-gid [group_name: string] {
         try {
-            ^cat /etc/group 
+            open --raw /etc/group 
             | lines 
-            | find --regex $"^($group_name):" 
+            | split column ":" name pwd gid users 
+            | where name == $group_name 
             | first 
-            | split row ":" 
-            | get 2
+            | get gid
         } catch {
             null
         }
@@ -85,7 +85,7 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
 
     for grp in $sync_groups {
         let gid = (get-gid $grp.host)
-        if ($gid != null) and ($gid != "") {
+        if not ($gid | is-empty) {
             try { in-chroot /usr/sbin/groupadd -g $gid -o $grp.guest }
             try { in-chroot /usr/sbin/usermod -aG $grp.guest $target_user }
         }
@@ -94,17 +94,17 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
     in-chroot /usr/sbin/usermod -aG sudo -s /bin/bash -u $target_uid $target_user
 
     let arch_shadow_hash = (try {
-        ^cat /etc/shadow
+        open --raw /etc/shadow
         | lines 
-        | find --regex $"^($target_user):" 
-        | first 
-        | split row ":" 
-        | get 1
+        | split column ":" name hash rest 
+        | where name == $target_user 
+        | first
+        | get hash
     } catch {
         null
     })
 
-    if ($arch_shadow_hash != null) and ($arch_shadow_hash != "!") and ($arch_shadow_hash != "*") and ($arch_shadow_hash != "") {
+    if not ($arch_shadow_hash | is-empty) and ($arch_shadow_hash != "!") and ($arch_shadow_hash != "*") {
         log-tty "Syncing password hash to Debian container..."
         in-chroot /usr/sbin/usermod -p $arch_shadow_hash $target_user
     } else {
