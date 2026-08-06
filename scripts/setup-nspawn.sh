@@ -144,9 +144,13 @@ append_bind "/dev/input" 0
 append_bind "/run/dbus/system_bus_socket" 1
 append_bind "/etc/machine-id" 1
 append_bind "/etc/localtime" 1
-append_bind "/usr/share/fonts" 1
-append_bind "/usr/share/icons" 1
-append_bind "/usr/share/themes" 1
+
+# aptと競合しないように、ホストのシステムリソースは /usr/local/share/... にマウントする
+for dir in fonts icons themes; do
+    if [[ -d "/usr/share/${dir}" ]]; then
+        echo "BindReadOnly=/usr/share/${dir}:/usr/local/share/${dir}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+    fi
+done
 
 if [[ -f "${TARGET_HOME}/.Xauthority" ]]; then
     echo "BindReadOnly=${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
@@ -168,6 +172,13 @@ fi
 log_info "Updating package lists..."
 in_nspawn apt-get update -q
 
+# パッケージインストール中のデーモン自動起動をブロックする
+cat > "${DEBIAN_ROOT}/usr/sbin/policy-rc.d" << 'EOF'
+#!/bin/sh
+exit 101
+EOF
+chmod +x "${DEBIAN_ROOT}/usr/sbin/policy-rc.d"
+
 log_info "Installing essential packages..."
 in_nspawn apt-get install -yq --no-install-recommends \
     systemd systemd-sysv passwd sudo locales dbus dbus-user-session \
@@ -177,6 +188,9 @@ in_nspawn apt-get install -yq --no-install-recommends \
     libpulse0 pipewire-alsa \
     wayland-utils x11-apps iproute2 iputils-ping \
     fonts-noto-cjk xdg-user-dirs
+
+# ブロック解除
+rm -f "${DEBIAN_ROOT}/usr/sbin/policy-rc.d"
 
 log_info "Configuring locales..."
 in_nspawn sed -i \
