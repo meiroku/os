@@ -202,7 +202,7 @@ log_info "Configuring container user..."
 if ! in_nspawn getent passwd "$TARGET_USER" >/dev/null 2>&1; then
     in_nspawn useradd -m -U -s /bin/bash -u "$TARGET_UID" "$TARGET_USER"
     in_nspawn cp -rnT /etc/skel "/home/${TARGET_USER}"
-    in_nspawn chrwn -R "${TARGET_USER}:${TARGET_USER}" "/home/${TARGET_USER}"
+    in_nspawn chown -R "${TARGET_USER}:${TARGET_USER}" "/home/${TARGET_USER}"
 else
     log_info "User '${TARGET_USER}' already exists in container."
 fi
@@ -239,6 +239,7 @@ cat > "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh" <<'EOF'
 # Auto-configured for GUI applications in systemd-nspawn
 
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
 
 if [ -d "$XDG_RUNTIME_DIR" ]; then
     for w_sock in "$XDG_RUNTIME_DIR"/wayland-*; do
