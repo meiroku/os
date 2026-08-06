@@ -31,6 +31,9 @@ Bind=/run/user
 Bind=/tmp/.X11-unix
 Bind=/dev/dri
 Bind=/dev/shm
+Bind=/dev/snd
+Bind=/dev/input
+BindReadOnly=/run/dbus/system_bus_socket
 BindReadOnly=/usr/share/fonts:/usr/local/share/fonts
 BindReadOnly=/usr/share/icons:/usr/local/share/icons
 BindReadOnly=/usr/share/themes:/usr/local/share/themes
@@ -53,7 +56,10 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
     in-chroot apt-get update
     
     with-env { DEBIAN_FRONTEND: "noninteractive" } {
-        in-chroot apt-get install -y wget curl gnupg ca-certificates sudo libgl1-mesa-dri libwayland-client0 libwayland-egl1 mesa-utils
+        in-chroot apt-get install -y wget curl gnupg ca-certificates sudo \
+            libgl1-mesa-dri libwayland-client0 libwayland-egl1 mesa-utils \
+            mesa-vulkan-drivers libvulkan1 xwayland \
+            libpulse0 pipewire-alsa dbus-user-session
     }
 
     in-chroot /usr/sbin/useradd -M -s /bin/bash -u $target_uid $target_user
@@ -72,6 +78,7 @@ BindReadOnly=/usr/share/themes:/usr/local/share/themes
         { host: "video",  guest: "arch_video" },
         { host: "audio",  guest: "arch_audio" },
         { host: "render", guest: "arch_render" },
+        { host: "input",  guest: "arch_input" },
     ]
 
     for grp in $sync_groups {
