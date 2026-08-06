@@ -22,7 +22,7 @@ def desktop_dir_candidates [] {
 
 def usage [] {
     let m_name = (machine_name)
-    let script_name = ($env.CURRENT_FILE? | default "nspawn-apt" | path basename)
+    let script_name = "apt"
     print $"Usage:
   ($script_name) <command> [args...]    : Run apt inside the '($m_name)' container
   ($script_name) link <app_name>        : Link a GUI app's .desktop file to the host
@@ -48,7 +48,7 @@ def resolve_target_user [] {
     if ($env.SUDO_USER? | default "") != "" and $env.SUDO_USER != "root" {
         return ($env.SUDO_USER | str trim)
     }
-    ^whoami | str trim
+    $env.USER? | default (^whoami | str trim)
 }
 
 def resolve_target_home [user: string] {
@@ -57,7 +57,7 @@ def resolve_target_home [user: string] {
         print -e $"Error: User '($user)' not found."
         exit 1
     }
-    let home = ($passwd_entry | split row ":" | get 5)
+    let home = ($passwd_entry | split row ":").5
     if ($home | is-empty) {
         print -e $"Error: Could not resolve home directory for '($user)'."
         exit 1
@@ -90,7 +90,8 @@ def first_desktop_value [text: string, key: string] {
     let prefix = $"($key)="
     for line in ($text | lines) {
         if ($line | str starts-with $prefix) {
-            return ($line | str substring ($prefix | str length)..)
+            # substring よりも安全かつ直感的に抽出
+            return ($line | str replace $prefix "")
         }
     }
     ""
@@ -101,8 +102,9 @@ def ensure_dir_chown [path: string, uid: int, gid: int] {
         mut paths_to_create = []
         mut current = ($path | path expand)
         
-        while not ($current | path exists) {
-            $paths_to_create = ($paths_to_create | append $current)
+        # ルートディレクトリ到達時の無限ループを防止
+        while not ($current | path exists) and $current != ($current | path dirname) {
+            $paths_to_create = [...$paths_to_create $current]
             $current = ($current | path dirname)
         }
         
@@ -117,14 +119,14 @@ def insert_after_desktop_entry [target_lines: list<string>, new_line: string] {
     mut inserted = false
     mut result = []
     for line in $target_lines {
-        $result = ($result | append $line)
+        $result = [...$result $line]
         if not $inserted and ($line | str trim) == "[Desktop Entry]" {
-            $result = ($result | append $new_line)
+            $result = [...$result $new_line]
             $inserted = true
         }
     }
     if not $inserted {
-        $result = ($result | prepend $new_line)
+        $result = [$new_line ...$result]
     }
     $result
 }
@@ -139,7 +141,7 @@ def iter_desktop_files [] {
         let dir = ((container_root) | path join $base)
         if ($dir | path exists) {
             let files = (glob ($dir | path join "**" "*.desktop"))
-            $found = ($found | append ...$files)
+            $found = [...$found ...$files]
         }
     }
     $found
@@ -156,12 +158,12 @@ def find_desktop_file [app_name: string] {
         let rel = ($path | str replace (container_root) "" | str lowercase)
 
         if $stem == $needle or $name == $"($needle).desktop" {
-            $exact_matches = ($exact_matches | append $path)
+            $exact_matches = [...$exact_matches $path]
             continue
         }
 
-        if ($needle in $stem) or ($needle in $name) or ($needle in $rel) {
-            $partial_matches = ($partial_matches | append $path)
+        if ($needle | str contains $stem) or ($needle | str contains $name) or ($needle | str contains $rel) {
+            $partial_matches = [...$partial_matches $path]
             continue
         }
     }
@@ -200,6 +202,7 @@ const ORIG_ICON = ($oi_repr)
 const ORIG_EXEC = ($oe_repr)
 "
 
+    # ラッパー内部でもNushell v0.114.1に適応したリスト構築へ変更
     let body = r#'
 def parse_exec [exec_str: string] {
     mut tokens = []
@@ -214,7 +217,7 @@ def parse_exec [exec_str: string] {
             $in_single = (not $in_single)
         } else if $c in [" ", "\t"] and not $in_double and not $in_single {
             if ($current_token | is-not-empty) {
-                $tokens = ($tokens | append $current_token)
+                $tokens = [...$tokens $current_token]
                 $current_token = ""
             }
         } else {
@@ -222,7 +225,7 @@ def parse_exec [exec_str: string] {
         }
     }
     if ($current_token | is-not-empty) {
-        $tokens = ($tokens | append $current_token)
+        $tokens = [...$tokens $current_token]
     }
     $tokens
 }
@@ -231,22 +234,22 @@ def expand_exec [tokens: list<string>, args: list<string>] {
     mut out = []
     for token in $tokens {
         if $token == "%%" {
-            $out = ($out | append "%")
+            $out = [...$out "%"]
         } else if $token == "%c" {
-            $out = ($out | append $DISPLAY_NAME)
+            $out = [...$out $DISPLAY_NAME]
         } else if $token == "%k" {
-            $out = ($out | append $DESKTOP_FILE)
+            $out = [...$out $DESKTOP_FILE]
         } else if $token == "%i" {
             if ($ORIG_ICON | is-not-empty) {
-                $out = ($out | append ...["--icon", $ORIG_ICON])
+                $out = [...$out "--icon" $ORIG_ICON]
             }
         } else if $token in ["%f", "%u"] {
             if ($args | is-not-empty) {
-                $out = ($out | append ($args | first))
+                $out = [...$out ($args | first)]
             }
         } else if $token in ["%F", "%U"] {
             if ($args | is-not-empty) {
-                $out = ($out | append ...$args)
+                $out = [...$out ...$args]
             }
         } else if ("%" in $token) {
             mut repl = ($token | str replace --all "%%" "%"
@@ -265,13 +268,13 @@ def expand_exec [tokens: list<string>, args: list<string>] {
                 $repl = ($repl | str replace --all "%F" $val | str replace --all "%U" $val)
             }
 
-            $out = ($out | append $repl)
+            $out = [...$out $repl]
 
             if $has_multi and ($args | length) > 1 {
-                $out = ($out | append ...($args | skip 1))
+                $out = [...$out ...($args | skip 1)]
             }
         } else {
-            $out = ($out | append $token)
+            $out = [...$out $token]
         }
     }
     $out
@@ -294,30 +297,30 @@ def main [...args: string] {
 
     let current_uid = (^id -u | into int)
     if $current_uid != 0 {
-        $cmd = ($cmd | append "sudo")
+        $cmd = [...$cmd "sudo"]
     }
 
-    $cmd = ($cmd | append ...[
-        "systemd-run",
-        "-M", $MACHINE,
-        "--quiet",
-        "--pipe",
-        "--wait",
-        $"--uid=($TARGET_UID)",
+    $cmd = [...$cmd
+        "systemd-run"
+        "-M" $MACHINE
+        "--quiet"
+        "--pipe"
+        "--wait"
+        $"--uid=($TARGET_UID)"
         $"--setenv=XDG_RUNTIME_DIR=/run/user/($TARGET_UID)"
-    ])
+    ]
     
     if ($wayland | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=WAYLAND_DISPLAY=($wayland)")
+        $cmd = [...$cmd $"--setenv=WAYLAND_DISPLAY=($wayland)"]
     }
     if ($display | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=DISPLAY=($display)")
+        $cmd = [...$cmd $"--setenv=DISPLAY=($display)"]
     }
     if ($xauthority | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=XAUTHORITY=($xauthority)")
+        $cmd = [...$cmd $"--setenv=XAUTHORITY=($xauthority)"]
     }
 
-    $cmd = ($cmd | append ...["--", "/usr/bin/env"] | append ...$final_cmd)
+    $cmd = [...$cmd "--" "/usr/bin/env" ...$final_cmd]
 
     let exe = ($cmd | first)
     let exec_args = ($cmd | skip 1)
@@ -349,35 +352,35 @@ def rewrite_desktop_file [
         if ($line | str starts-with "Name=") or ($line | str starts-with "Name[") {
             if not $seen_name {
                 let cap_machine = ($m_name | str capitalize)
-                $out = ($out | append $"Name=[($cap_machine)] ($display_name)\n")
+                $out = [...$out $"Name=[($cap_machine)] ($display_name)\n"]
                 $seen_name = true
             }
             continue
         }
 
         if ($line | str starts-with "Exec=") {
-            $out = ($out | append $"Exec=($quoted_wrapper) %U\n")
+            $out = [...$out $"Exec=($quoted_wrapper) %U\n"]
             $seen_exec = true
             continue
         }
 
         if ($line | str starts-with "TryExec=") {
-            $out = ($out | append $"TryExec=($quoted_wrapper)\n")
+            $out = [...$out $"TryExec=($quoted_wrapper)\n"]
             $seen_tryexec = true
             continue
         }
 
         if ($line | str starts-with "Icon=") {
-            let icon_value = ($line | str substring 5..)
+            let icon_value = ($line | str replace "Icon=" "")
             if ($icon_value | str starts-with "/") {
-                $out = ($out | append $"Icon=($c_root)($icon_value)\n")
+                $out = [...$out $"Icon=($c_root)($icon_value)\n"]
             } else {
-                $out = ($out | append $"($line)\n")
+                $out = [...$out $"($line)\n"]
             }
             continue
         }
 
-        $out = ($out | append $"($line)\n")
+        $out = [...$out $"($line)\n"]
     }
 
     if not $seen_name {
@@ -480,8 +483,8 @@ def unlink_app [app_name: string] {
 
     for f in $desktop_files {
         let name = ($f | path basename | str lowercase)
-        if ($needle in $name) {
-            $matched_desktops = ($matched_desktops | append $f)
+        if ($needle | str contains $name) {
+            $matched_desktops = [...$matched_desktops $f]
         }
     }
 
@@ -491,7 +494,8 @@ def unlink_app [app_name: string] {
     }
 
     for df in $matched_desktops {
-        let base_name = ($df | path parse | get stem | str replace $"^($m_name)-" "")
+        # 正規表現モード(--regex) を明示して先頭一致で削除する
+        let base_name = ($df | path parse | get stem | str replace --regex $"^($m_name)-" "")
         let slug = (sanitize_slug $base_name)
         
         # Look for both the new .nu wrapper and the old .py wrapper for safe cleanup
@@ -539,8 +543,7 @@ def main [
 
     if $command == "link" {
         if ($args | is-empty) {
-            let script_name = ($env.CURRENT_FILE? | default "nspawn-apt" | path basename)
-            print -e $"Error: Please specify an application name. Example: ($script_name) link firefox"
+            print -e "Error: Please specify an application name. Example: apt link firefox"
             exit 1
         }
         link_app ($args | first)
@@ -549,14 +552,13 @@ def main [
 
     if $command == "unlink" {
         if ($args | is-empty) {
-            let script_name = ($env.CURRENT_FILE? | default "nspawn-apt" | path basename)
-            print -e $"Error: Please specify an application name. Example: ($script_name) unlink firefox"
+            print -e "Error: Please specify an application name. Example: apt unlink firefox"
             exit 1
         }
         unlink_app ($args | first)
         return
     }
 
-    let all_args = ([$command] | append ...$args)
+    let all_args = [$command ...$args]
     passthrough_apt $all_args
 }
