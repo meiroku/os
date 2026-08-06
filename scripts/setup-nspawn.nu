@@ -32,7 +32,7 @@ def main [] {
     let target_uid = (^id -u $target_user | str trim)
     let debian_root = "/var/lib/machines/debian"
 
-    log-info $"Target user: ($target_user) (UID: ($target_uid))"
+    log-info $"Target user: ($target_user), (UID: ($target_uid))"
     log-info $"Container root: ($debian_root)"
 
     if not ($debian_root | path exists) {
