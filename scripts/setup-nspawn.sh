@@ -98,7 +98,6 @@ if [[ ! -f "$DEBIAN_ROOT/etc/debian_version" ]]; then
     debootstrap \
         --variant=minbase \
         --arch="$HOST_ARCH" \
-        --no-check-gpg \
         "$DEBIAN_RELEASE" \
         "$DEBIAN_ROOT" \
         "$DEBIAN_MIRROR"
@@ -142,7 +141,6 @@ append_bind "/dev/shm" 0
 append_bind "/dev/snd" 0
 append_bind "/dev/input" 0
 append_bind "/run/dbus/system_bus_socket" 1
-append_bind "/etc/machine-id" 1
 append_bind "/etc/localtime" 1
 
 # aptと競合しないように、ホストのシステムリソースは /usr/local/share/... にマウントする
@@ -203,6 +201,8 @@ in_nspawn update-locale LANG=ja_JP.UTF-8 LANGUAGE=ja_JP:ja
 log_info "Configuring container user..."
 if ! in_nspawn getent passwd "$TARGET_USER" >/dev/null 2>&1; then
     in_nspawn useradd -m -U -s /bin/bash -u "$TARGET_UID" "$TARGET_USER"
+    in_nspawn cp -rnT /etc/skel "/home/${TARGET_USER}"
+    in_nspawn chrwn -R "${TARGET_USER}:${TARGET_USER}" "/home/${TARGET_USER}"
 else
     log_info "User '${TARGET_USER}' already exists in container."
 fi
