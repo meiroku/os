@@ -109,11 +109,13 @@ fi
 log_info "Generating nspawn config..."
 install -d -m 0755 /etc/systemd/nspawn
 
+# RestrictAddressFamilies を追加し、ネットワーク系の警告を解消
 cat > "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn" <<EOF
 [Exec]
 Boot=yes
 PrivateUsers=no
 ResolvConf=bind-host
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Network]
 VirtualEthernet=no
@@ -131,10 +133,24 @@ BindReadOnly=-/etc/localtime
 BindReadOnly=-/usr/share/fonts
 BindReadOnly=-/usr/share/icons
 BindReadOnly=-/usr/share/themes
-BindReadOnly=-${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority
-BindReadOnly=-${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts
-BindReadOnly=-${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons
 EOF
+
+# 存在しない場合のエラーを避けるため、ホスト側に存在する場合のみ設定を追加し、コンテナ側にもマウントポイントを事前作成する
+if [[ -f "${TARGET_HOME}/.Xauthority" ]]; then
+    echo "BindReadOnly=${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+    mkdir -p "${DEBIAN_ROOT}/home/${TARGET_USER}"
+    touch "${DEBIAN_ROOT}/home/${TARGET_USER}/.Xauthority"
+fi
+
+if [[ -d "${TARGET_HOME}/.local/share/fonts" ]]; then
+    echo "BindReadOnly=${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+    mkdir -p "${DEBIAN_ROOT}/home/${TARGET_USER}/.local/share/fonts"
+fi
+
+if [[ -d "${TARGET_HOME}/.icons" ]]; then
+    echo "BindReadOnly=${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+    mkdir -p "${DEBIAN_ROOT}/home/${TARGET_USER}/.icons"
+fi
 
 # --- コンテナ内の初期設定 ---
 log_info "Updating package lists..."
