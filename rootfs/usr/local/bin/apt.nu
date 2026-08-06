@@ -22,14 +22,15 @@ def desktop_dir_candidates [] {
 
 def usage [] {
     let m_name = (machine_name)
+    let script_name = ($env.CURRENT_FILE? | default "nspawn-apt" | path basename)
     print $"Usage:
-  (term size | get columns | into string | str replace -r '.*' '')<command> [args...]    : Run apt inside the '($m_name)' container
-  export <app_name>      : Export a GUI app's .desktop file to the host
-  unexport <app_name>    : Remove an exported app's .desktop and wrapper from the host
+  ($script_name) <command> [args...]    : Run apt inside the '($m_name)' container
+  ($script_name) link <app_name>        : Link a GUI app's .desktop file to the host
+  ($script_name) unlink <app_name>      : Remove a linked app's .desktop and wrapper from the host
 
 Environment:
   TARGET_UID=1000            : UID used inside the container for GUI apps
-  TARGET_USER=username       : Host user who receives exported .desktop files
+  TARGET_USER=username       : Host user who receives linked .desktop files
   MACHINE_NAME=debian        : systemd-nspawn machine name
   CONTAINER_ROOT=/var/...    : Root path of the machine
 
@@ -51,7 +52,12 @@ def resolve_target_user [] {
 }
 
 def resolve_target_home [user: string] {
-    let home = (^getent passwd $user | split row ':' | get 5)
+    let passwd_entry = (^getent passwd $user | str trim)
+    if ($passwd_entry | is-empty) {
+        print -e $"Error: User '($user)' not found."
+        exit 1
+    }
+    let home = ($passwd_entry | split row ":" | get 5)
     if ($home | is-empty) {
         print -e $"Error: Could not resolve home directory for '($user)'."
         exit 1
@@ -72,10 +78,10 @@ def resolve_target_gid [user: string] {
 
 def sanitize_slug [text: string] {
     let s = ($text | str lowercase
-                   | str replace -a ' ' '-'
-                   | str replace -a '/' '-'
-                   | str replace -r -a '[^a-z0-9._-]+' '-'
-                   | str replace -r -a '-+' '-'
+                   | str replace --all ' ' '-'
+                   | str replace --all '/' '-'
+                   | str replace --regex --all '[^a-z0-9._-]+' '-'
+                   | str replace --regex --all '-+' '-'
                    | str trim -c '-')
     if ($s | is-empty) { "app" } else { $s }
 }
@@ -133,7 +139,7 @@ def iter_desktop_files [] {
         let dir = ((container_root) | path join $base)
         if ($dir | path exists) {
             let files = (glob ($dir | path join "**" "*.desktop"))
-            $found = ($found | append $files)
+            $found = ($found | append ...$files)
         }
     }
     $found
@@ -229,44 +235,46 @@ def expand_exec [tokens: list<string>, args: list<string>] {
         } else if $token == "%c" {
             $out = ($out | append $DISPLAY_NAME)
         } else if $token == "%k" {
-            $out = ($out | append #DESKTOP_FILE)
+            $out = ($out | append $DESKTOP_FILE)
         } else if $token == "%i" {
             if ($ORIG_ICON | is-not-empty) {
-                $out = ($out | append ["--icon", $ORIG_ICON])
+                $out = ($out | append ...["--icon", $ORIG_ICON])
             }
         } else if $token in ["%f", "%u"] {
             if ($args | is-not-empty) {
                 $out = ($out | append ($args | first))
             }
         } else if $token in ["%F", "%U"] {
-            $out = ($out | append $args)
+            if ($args | is-not-empty) {
+                $out = ($out | append ...$args)
+            }
         } else if ("%" in $token) {
-            mut repl = ($token | str replace -a "%%" "%"
-                               | str replace -a "%c" $DISPLAY_NAME
-                               | str replace -a "%k" #DESKTOP_FILE)
+            mut repl = ($token | str replace --all "%%" "%"
+                               | str replace --all "%c" $DISPLAY_NAME
+                               | str replace --all "%k" $DESKTOP_FILE)
 
             let has_single = ("%f" in $repl) or ("%u" in $repl)
             let has_multi = ("%F" in $repl) or ("%U" in $repl)
 
             if $has_single {
                 let val = if ($args | is-empty) { "" } else { $args | first }
-                $repl = ($repl | str replace -a "%f" $val | str replace -a "%u" $val)
+                $repl = ($repl | str replace --all "%f" $val | str replace --all "%u" $val)
             }
             if $has_multi {
                 let val = if ($args | is-empty) { "" } else { $args | first }
-                $repl = ($repl | str replace -a "%F" $val | str replace -a "%U" $val)
+                $repl = ($repl | str replace --all "%F" $val | str replace --all "%U" $val)
             }
 
             $out = ($out | append $repl)
 
             if $has_multi and ($args | length) > 1 {
-                $out = ($out | append ($args | skip 1))
+                $out = ($out | append ...($args | skip 1))
             }
         } else {
             $out = ($out | append $token)
         }
     }
-    $out | flatten
+    $out
 }
 
 def main [...args: string] {
@@ -289,9 +297,9 @@ def main [...args: string] {
         $cmd = ($cmd | append "sudo")
     }
 
-    $cmd = ($cmd | append [
+    $cmd = ($cmd | append ...[
         "systemd-run",
-        "-M", MACHINE,
+        "-M", $MACHINE,
         "--quiet",
         "--pipe",
         "--wait",
@@ -300,16 +308,16 @@ def main [...args: string] {
     ])
     
     if ($wayland | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=$WAYLAND_DISPLAY=($wayland)")
+        $cmd = ($cmd | append $"--setenv=WAYLAND_DISPLAY=($wayland)")
     }
     if ($display | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=$DISPLAY=($display)")
+        $cmd = ($cmd | append $"--setenv=DISPLAY=($display)")
     }
     if ($xauthority | is-not-empty) {
-        $cmd = ($cmd | append $"--setenv=$XAUTHORITY=($xauthority)")
+        $cmd = ($cmd | append $"--setenv=XAUTHORITY=($xauthority)")
     }
 
-$cmd = ($cmd | append ["--", "/usr/bin/env"] | append $final_cmd | flatten)
+    $cmd = ($cmd | append ...["--", "/usr/bin/env"] | append ...$final_cmd)
 
     let exe = ($cmd | first)
     let exec_args = ($cmd | skip 1)
@@ -327,7 +335,7 @@ def rewrite_desktop_file [
     c_root: string
     display_name: string
 ] {
-    let text = (^cat $desktop_path)
+    let text = (open --raw $desktop_path)
     let lines = ($text | lines)
 
     mut out = []
@@ -386,7 +394,7 @@ def rewrite_desktop_file [
     $out | str join "" | save -f $desktop_path
 }
 
-def export_app [app_name: string] {
+def link_app [app_name: string] {
     let target_user = (resolve_target_user)
     let target_home = (resolve_target_home $target_user)
     let target_uid = (resolve_target_uid $target_user)
@@ -404,7 +412,7 @@ def export_app [app_name: string] {
     ensure_dir_chown $wrapper_dir $target_uid $target_gid
 
     let desktop_file = (find_desktop_file $app_name)
-    if $desktop_file == null {
+    if ($desktop_file | is-empty) {
         print -e $"Error: No .desktop file found for '($app_name)' in the container."
         exit 1
     }
@@ -416,7 +424,7 @@ def export_app [app_name: string] {
     let output_desktop = ($desktop_dir | path join $"(machine_name)-($file_name)")
     let wrapper_file = ($wrapper_dir | path join $"(machine_name)-($slug)-launch.nu")
 
-    let src_text = (^cat $desktop_file)
+    let src_text = (open --raw $desktop_file)
     mut orig_name = (first_desktop_value $src_text "Name")
     if ($orig_name | is-empty) {
         $orig_name = $app_name
@@ -441,18 +449,18 @@ def export_app [app_name: string] {
     ^chown $"($target_uid):($target_gid)" $output_desktop
     ^chown $"($target_uid):($target_gid)" $wrapper_file
 
-    print "Export successful:"
+    print "Link successful:"
     print $"  Desktop : ($output_desktop)"
     print $"  Wrapper : ($wrapper_file)"
 
     if (which update-desktop-database | is-not-empty) {
         with-env { HOME: $target_home, USER: $target_user } {
-            do -i { ^sudo -u $target_user -E update-desktop-database $desktop_dir out+err> /dev/null }
+            try { ^sudo -u $target_user -E update-desktop-database $desktop_dir out+err> /dev/null }
         }
     }
 }
 
-def unexport_app [app_name: string] {
+def unlink_app [app_name: string] {
     let target_user = (resolve_target_user)
     let target_home = (resolve_target_home $target_user)
     let desktop_dir = ($target_home | path join ".local" "share" "applications")
@@ -466,7 +474,7 @@ def unexport_app [app_name: string] {
         exit 1
     }
 
-    # Search for exported desktop files on the host directly (ignoring container state)
+    # Search for linked desktop files on the host directly (ignoring container state)
     let desktop_files = (glob ($desktop_dir | path join $"($m_name)-*.desktop"))
     mut matched_desktops = []
 
@@ -478,7 +486,7 @@ def unexport_app [app_name: string] {
     }
 
     if ($matched_desktops | is-empty) {
-        print -e $"Error: No exported app matching '($app_name)' found for machine '($m_name)'."
+        print -e $"Error: No linked app matching '($app_name)' found for machine '($m_name)'."
         exit 1
     }
 
@@ -503,11 +511,11 @@ def unexport_app [app_name: string] {
         }
     }
 
-    print "Unexport successful."
+    print "Unlink successful."
 
     if (which update-desktop-database | is-not-empty) {
         with-env { HOME: $target_home, USER: $target_user } {
-            do -i { ^sudo -u $target_user -E update-desktop-database $desktop_dir out+err> /dev/null }
+            try { ^sudo -u $target_user -E update-desktop-database $desktop_dir out+err> /dev/null }
         }
     }
 }
@@ -524,29 +532,31 @@ def main [
     command?: string
     ...args: string
 ] {
-    if $command == null or $command in ["-h", "--help", "help"] {
+    if ($command | is-empty) or $command in ["-h", "--help", "help"] {
         usage
-        exit (if $command == null { 1 } else { 0 })
+        exit (if ($command | is-empty) { 1 } else { 0 })
     }
 
-    if $command == "export" {
+    if $command == "link" {
         if ($args | is-empty) {
-            print -e "Error: Please specify an application name. Example: apt export firefox"
+            let script_name = ($env.CURRENT_FILE? | default "nspawn-apt" | path basename)
+            print -e $"Error: Please specify an application name. Example: ($script_name) link firefox"
             exit 1
         }
-        export_app ($args | first)
+        link_app ($args | first)
         return
     }
 
-    if $command == "unexport" {
+    if $command == "unlink" {
         if ($args | is-empty) {
-            print -e "Error: Please specify an application name. Example: apt unexport firefox"
+            let script_name = ($env.CURRENT_FILE? | default "nspawn-apt" | path basename)
+            print -e $"Error: Please specify an application name. Example: ($script_name) unlink firefox"
             exit 1
         }
-        unexport_app ($args | first)
+        unlink_app ($args | first)
         return
     }
 
-    let all_args = ([$command] | append $args)
+    let all_args = ([$command] | append ...$args)
     passthrough_apt $all_args
 }
