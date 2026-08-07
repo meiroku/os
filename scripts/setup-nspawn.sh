@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 022
 
 # --- エラー時の表示 ---
-trap 'log_error "Failed at line ${LINENO}: ${BASH_COMMAND}"' ERR
+trap 'log_error "Failed at ${BASH_SOURCE[0]}:${BASH_LINENO[0]}: ${BASH_COMMAND}"' ERR
 
 # --- ANSIエスケープシーケンス ---
 readonly GREEN=$'\033[1;32m'
@@ -151,7 +151,7 @@ in_nspawn apt-get install -yq --no-install-recommends \
     wayland-utils x11-apps iproute2 iputils-ping \
     fonts-noto-cjk xdg-user-dirs
 
-# ブロック解除
+# policy-rc.dを削除して通常動作に戻す
 rm -f "${DEBIAN_ROOT}/usr/sbin/policy-rc.d"
 
 log_info "Cleaning up apt cache..."
@@ -236,7 +236,7 @@ if [ -d /tmp/.X11-unix ]; then
             if [ -f "$HOME/.Xauthority" ]; then
                 export XAUTHORITY="$HOME/.Xauthority"
             fi
-            # /mnt/host_run_user に配置される動的認証ファイルを探す
+            # /mnt/host_run_userに配置される動的認証ファイルを探す
             for auth in "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* "$XDG_RUNTIME_DIR"/xauth_* "$XDG_RUNTIME_DIR"/Xauthority; do
                 if [ -f "$auth" ] && [ -r "$auth" ]; then
                     export XAUTHORITY="$auth"
@@ -247,7 +247,7 @@ if [ -d /tmp/.X11-unix ]; then
         break
     done
 fi
-# terminfoデータベースに存在しない端末(xterm-ghosttyなど)のエラー回避
+# terminfoデータベースに存在しない端末のエラー回避
 if ! infocmp >/dev/null 2>&1; then
     export TERM=xterm-256color
 fi
