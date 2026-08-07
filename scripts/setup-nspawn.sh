@@ -90,6 +90,9 @@ log_info "Target home: ${TARGET_HOME}"
 log_info "Host architecture: ${HOST_ARCH}"
 log_info "Container root: ${DEBIAN_ROOT}"
 
+# --- 古い設定ファイルのクリーンアップ ---
+rm -f "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+
 # --- コンテナ作成 ---
 mkdir -p "$DEBIAN_ROOT"
 
