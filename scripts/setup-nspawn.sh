@@ -114,55 +114,28 @@ cat > "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn" <<EOF
 Boot=yes
 PrivateUsers=no
 ResolvConf=bind-host
+SystemCallFilter=@system-service @sandbox
 
 [Network]
 VirtualEthernet=no
 
 [Files]
+Bind=-/run/user/${TARGET_UID}:/mnt/host_run_user
+Bind=-/tmp/.X11-unix
+Bind=-/dev/dri
+Bind=-/dev/shm
+Bind=-/dev/snd
+Bind=-/dev/input
+BindReadOnly=-/etc/localtime
+
+BindReadOnly=-${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority
+BindReadOnly=-${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts
+BindReadOnly=-${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons
+
+BindReadOnly=-/usr/share/fonts:/usr/local/share/fonts
+BindReadOnly=-/usr/share/icons:/usr/local/share/icons
+BindReadOnly=-/usr/share/themes:/usr/local/share/themes
 EOF
-
-append_bind() {
-    local src="$1"
-    local readonly_flag="${2:-0}"
-    if [[ -e "$src" ]]; then
-        if (( readonly_flag == 1 )); then
-            echo "BindReadOnly=${src}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-        else
-            echo "Bind=${src}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-        fi
-    fi
-}
-
-echo "Bind=/run/user/${TARGET_UID}:/mnt/host_run_user" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-append_bind "/tmp/.X11-unix" 0
-append_bind "/dev/dri" 0
-append_bind "/dev/shm" 0
-append_bind "/dev/snd" 0
-append_bind "/dev/input" 0
-append_bind "/etc/localtime" 1
-
-# aptと競合しないように、ホストのシステムリソースは /usr/local/share/... にマウントする
-for dir in fonts icons themes; do
-    if [[ -d "/usr/share/${dir}" ]]; then
-        echo "BindReadOnly=/usr/share/${dir}:/usr/local/share/${dir}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-    fi
-done
-
-if [[ -f "${TARGET_HOME}/.Xauthority" ]]; then
-    echo "BindReadOnly=${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-    mkdir -p "${DEBIAN_ROOT}/home/${TARGET_USER}"
-    touch "${DEBIAN_ROOT}/home/${TARGET_USER}/.Xauthority"
-fi
-
-if [[ -d "${TARGET_HOME}/.local/share/fonts" ]]; then
-    echo "BindReadOnly=${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-    mkdir -p "${DEBIAN_ROOT}/home/${TARGET_USER}/.local/share/fonts"
-fi
-
-if [[ -d "${TARGET_HOME}/.icons" ]]; then
-    echo "BindReadOnly=${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-    mkdir -p "${DEBIAN_ROOT}/home/${TARGET_USER}/.icons"
-fi
 
 # --- コンテナ内の初期設定 ---
 log_info "Updating package lists..."
