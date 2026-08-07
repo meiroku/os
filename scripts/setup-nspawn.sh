@@ -70,7 +70,7 @@ get_debian_arch() {
     esac
 }
 
-# --- 事前チェック ---
+# --- 実行前バリデーション ---
 if (( EUID != 0 )); then
     die "This script must be run as root via sudo."
 fi
@@ -264,7 +264,7 @@ fi
 EOF
 fi
 
-# --- バインド元ディレクトリ・ファイルの保証 ---
+# --- ホスト側バインド用ディレクトリ・権限の準備 ---
 log_info "Ensuring host paths exist for bind mounts..."
 mkdir -p /tmp/.X11-unix
 chmod 1777 /tmp/.X11-unix || true
@@ -279,7 +279,7 @@ if [[ ! -f "${TARGET_HOME}/.Xauthority" ]]; then
     sudo -u "$TARGET_USER" touch "${TARGET_HOME}/.Xauthority"
 fi
 
-# --- nspawn 設定（必ずコンテナ内初期設定の後に実行） ---
+# --- systemd-nspawnのコンテナ設定の生成 ---
 log_info "Generating nspawn config..."
 install -d -m 0755 /etc/systemd/nspawn
 
@@ -315,7 +315,7 @@ for dir in "fonts" "icons" "themes"; do
     fi
 done
 
-# --- ホスト側 systemd サービス設定 ---
+# --- ホスト側のsystemdサービス構成と起動 ---
 log_info "Configuring systemd override for race condition prevention..."
 OVERRIDE_DIR="/etc/systemd/system/systemd-nspawn@${CONTAINER_NAME}.service.d"
 mkdir -p "$OVERRIDE_DIR"
