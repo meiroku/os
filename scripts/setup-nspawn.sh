@@ -161,6 +161,10 @@ in_nspawn apt-get install -yq --no-install-recommends \
 # ブロック解除
 rm -f "${DEBIAN_ROOT}/usr/sbin/policy-rc.d"
 
+log_info "Cleaning up apt cache..."
+in_nspawn apt-get clean
+in_nspawn rm -rf /var/lib/apt/lists/*
+
 log_info "Configuring locales..."
 in_nspawn sed -i \
     -e 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' \
@@ -211,6 +215,10 @@ cat > "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh" <<'EOF'
 
 export XDG_RUNTIME_DIR="/mnt/host_run_user"
 export PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
+
+if [ -S "${XDG_RUNTIME_DIR}/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+fi
 
 if [ -d "$XDG_RUNTIME_DIR" ]; then
     for w_sock in "$XDG_RUNTIME_DIR"/wayland-*; do
