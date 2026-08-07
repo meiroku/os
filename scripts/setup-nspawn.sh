@@ -137,6 +137,7 @@ in_nspawn apt-get install -yq --no-install-recommends \
     libgl1-mesa-dri libwayland-client0 libwayland-egl1 \
     mesa-utils mesa-vulkan-drivers libvulkan1 xwayland \
     libpulse0 pipewire-alsa \
+    libcanberra-gtk3-module \
     wayland-utils x11-apps iproute2 iputils-ping \
     fonts-noto-cjk xdg-user-dirs
 
@@ -159,6 +160,7 @@ log_info "Configuring container user..."
 if ! in_nspawn getent passwd "$TARGET_USER" >/dev/null 2>&1; then
     in_nspawn useradd -m -U -s /bin/bash -u "$TARGET_UID" "$TARGET_USER"
     in_nspawn cp -rnT /etc/skel "/home/${TARGET_USER}"
+    in_nspawn mkdir -p "/home/${TARGET_USER}/.local/share" "/home/${TARGET_USER}/.icons"
     in_nspawn bash -c "chown -R '${TARGET_USER}:${TARGET_USER}' '/home/${TARGET_USER}' 2>/dev/null || true"
 else
     log_info "User '${TARGET_USER}' already exists in container."
@@ -223,6 +225,14 @@ if [ -d /tmp/.X11-unix ]; then
 fi
 EOF
 chmod 0644 "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh"
+
+log_info "Configuring bashrc for automatic GUI environment setup..."
+cat >> "${DEBIAN_ROOT}/home/${TARGET_USER}/.bashrc" << 'EOF'
+
+if [ -f /etc/profile.d/99-gui-env.sh ]; then
+    source /etc/profile.d/99-gui-env.sh
+fi
+EOF
 
 # --- バインド元ディレクトリ・ファイルの保証 ---
 log_info "Ensuring host paths exist for bind mounts..."
