@@ -115,27 +115,32 @@ Boot=yes
 PrivateUsers=no
 ResolvConf=bind-host
 SystemCallFilter=@system-service @sandbox
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_BLUETOOTH
 
 [Network]
 VirtualEthernet=no
 
 [Files]
-Bind=-/run/user/${TARGET_UID}:/mnt/host_run_user
-Bind=-/tmp/.X11-unix
-Bind=-/dev/dri
-Bind=-/dev/shm
-Bind=-/dev/snd
-Bind=-/dev/input
-BindReadOnly=-/etc/localtime
-
-BindReadOnly=-${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority
-BindReadOnly=-${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts
-BindReadOnly=-${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons
-
-BindReadOnly=-/usr/share/fonts:/usr/local/share/fonts
-BindReadOnly=-/usr/share/icons:/usr/local/share/icons
-BindReadOnly=-/usr/share/themes:/usr/local/share/themes
 EOF
+
+[[ -e "/run/user/${TARGET_UID}" ]] && echo "Bind=/run/user/${TARGET_UID}:/mnt/host_run_user" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+
+for src in "/tmp/.X11-unix" "/dev/dri" "/dev/shm" "/dev/snd" "/dev/input"; do
+    [[ -e "$src" ]] && echo "Bind=$src" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+done
+[[ -e "/etc/localtime" ]] && echo "BindReadOnly=/etc/localtime" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+
+for item in \
+    "${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority" \
+    "${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts" \
+    "${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons" \
+    "/usr/share/fonts:/usr/local/share/fonts" \
+    "/usr/share/icons:/usr/local/share/icons" \
+    "/usr/share/themes:/usr/local/share/themes"
+do
+    src="${item%%:*}"
+    [[ -e "$src" ]] && echo "BindReadOnly=$item" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+done
 
 # --- コンテナ内の初期設定 ---
 log_info "Updating package lists..."
