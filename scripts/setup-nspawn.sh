@@ -227,12 +227,14 @@ EOF
 chmod 0644 "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh"
 
 log_info "Configuring bashrc for automatic GUI environment setup..."
-cat >> "${DEBIAN_ROOT}/home/${TARGET_USER}/.bashrc" << 'EOF'
+if ! in_nspawn grep -q "99-gui-env.sh" "/home/${TARGET_USER}/.bashrc"; then
+    cat >> "${DEBIAN_ROOT}/home/${TARGET_USER}/.bashrc" << 'EOF'
 
 if [ -f /etc/profile.d/99-gui-env.sh ]; then
     source /etc/profile.d/99-gui-env.sh
 fi
 EOF
+fi
 
 # --- バインド元ディレクトリ・ファイルの保証 ---
 log_info "Ensuring host paths exist for bind mounts..."
@@ -274,7 +276,7 @@ BindReadOnly=${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons
 EOF
 
 # ハードウェア依存ノードが存在する場合のみ追記
-for src in "/dev/dri" "/dev/shm" "/dev/snd" "/dev/input"; do
+for src in "/dev/dri" "/dev/snd" "/dev/input"; do
     [[ -e "$src" ]] && echo "Bind=$src" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
 done
 
