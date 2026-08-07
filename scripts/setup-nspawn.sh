@@ -114,7 +114,6 @@ cat > "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn" <<EOF
 Boot=yes
 PrivateUsers=no
 ResolvConf=bind-host
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Network]
 VirtualEthernet=no
@@ -134,13 +133,12 @@ append_bind() {
     fi
 }
 
-append_bind "/run/user/${TARGET_UID}" 0
+echo "Bind=/run/user/${TARGET_UID}:/mnt/host_run_user" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
 append_bind "/tmp/.X11-unix" 0
 append_bind "/dev/dri" 0
 append_bind "/dev/shm" 0
 append_bind "/dev/snd" 0
 append_bind "/dev/input" 0
-append_bind "/run/dbus/system_bus_socket" 1
 append_bind "/etc/localtime" 1
 
 # aptと競合しないように、ホストのシステムリソースは /usr/local/share/... にマウントする
@@ -238,7 +236,7 @@ install -d -m 0755 "${DEBIAN_ROOT}/etc/profile.d"
 cat > "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh" <<'EOF'
 # Auto-configured for GUI applications in systemd-nspawn
 
-export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export XDG_RUNTIME_DIR="/mnt/host_run_user"
 export PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
 
 if [ -d "$XDG_RUNTIME_DIR" ]; then
