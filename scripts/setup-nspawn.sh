@@ -105,43 +105,6 @@ else
     log_info "Debian base system already exists, skipping debootstrap."
 fi
 
-# --- nspawn 設定 ---
-log_info "Generating nspawn config..."
-install -d -m 0755 /etc/systemd/nspawn
-
-cat > "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn" <<EOF
-[Exec]
-Boot=yes
-PrivateUsers=no
-ResolvConf=bind-host
-SystemCallFilter=@system-service @sandbox
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_BLUETOOTH
-
-[Network]
-VirtualEthernet=no
-
-[Files]
-EOF
-
-[[ -e "/run/user/${TARGET_UID}" ]] && echo "Bind=/run/user/${TARGET_UID}:/mnt/host_run_user" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-
-for src in "/tmp/.X11-unix" "/dev/dri" "/dev/shm" "/dev/snd" "/dev/input"; do
-    [[ -e "$src" ]] && echo "Bind=$src" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-done
-[[ -e "/etc/localtime" ]] && echo "BindReadOnly=/etc/localtime" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-
-for item in \
-    "${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority" \
-    "${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts" \
-    "${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons" \
-    "/usr/share/fonts:/usr/local/share/fonts" \
-    "/usr/share/icons:/usr/local/share/icons" \
-    "/usr/share/themes:/usr/local/share/themes"
-do
-    src="${item%%:*}"
-    [[ -e "$src" ]] && echo "BindReadOnly=$item" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
-done
-
 # --- コンテナ内の初期設定 ---
 log_info "Updating package lists..."
 in_nspawn apt-get update -q
@@ -247,7 +210,68 @@ fi
 EOF
 chmod 0644 "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh"
 
-# --- ホスト側 service 設定 ---
+# --- バインド元ディレクトリ・ファイルの保証 ---
+log_info "Ensuring host paths exist for bind mounts..."
+mkdir -p /tmp/.X11-unix
+chmod 1777 /tmp/.X11-unix || true
+
+# ユーザー権限でホームディレクトリ以下の必要なパスを作成
+sudo -u "$TARGET_USER" mkdir -p \
+    "${TARGET_HOME}/.local/share/fonts" \
+    "${TARGET_HOME}/.icons" \
+    "${TARGET_HOME}/.themes"
+
+if [[ ! -f "${TARGET_HOME}/.Xauthority" ]]; then
+    sudo -u "$TARGET_USER" touch "${TARGET_HOME}/.Xauthority"
+fi
+
+# --- nspawn 設定（必ずコンテナ内初期設定の後に実行） ---
+log_info "Generating nspawn config..."
+install -d -m 0755 /etc/systemd/nspawn
+
+cat > "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn" <<EOF
+[Exec]
+Boot=yes
+PrivateUsers=no
+ResolvConf=bind-host
+SystemCallFilter=@system-service @sandbox
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_BLUETOOTH
+
+[Network]
+VirtualEthernet=no
+
+[Files]
+Bind=/run/user/${TARGET_UID}:/mnt/host_run_user
+Bind=/tmp/.X11-unix
+BindReadOnly=/etc/localtime
+BindReadOnly=${TARGET_HOME}/.Xauthority:/home/${TARGET_USER}/.Xauthority
+BindReadOnly=${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share/fonts
+BindReadOnly=${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons
+EOF
+
+# ハードウェア依存ノードが存在する場合のみ追記
+for src in "/dev/dri" "/dev/shm" "/dev/snd" "/dev/input"; do
+    [[ -e "$src" ]] && echo "Bind=$src" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+done
+
+# システムの共有リソースが存在する場合のみ追記
+for dir in "fonts" "icons" "themes"; do
+    if [[ -d "/usr/share/${dir}" ]]; then
+        echo "BindReadOnly=/usr/share/${dir}:/usr/local/share/${dir}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
+    fi
+done
+
+# --- ホスト側 systemd サービス設定 ---
+log_info "Configuring systemd override for race condition prevention..."
+OVERRIDE_DIR="/etc/systemd/system/systemd-nspawn@${CONTAINER_NAME}.service.d"
+mkdir -p "$OVERRIDE_DIR"
+cat > "${OVERRIDE_DIR}/override.conf" <<EOF
+[Unit]
+# Ensure host's user runtime directory (/run/user/${TARGET_UID}) exists before starting container
+After=user@${TARGET_UID}.service
+Requires=user@${TARGET_UID}.service
+EOF
+
 log_info "Reloading host systemd and enabling container service..."
 systemctl daemon-reload
 systemctl enable --now "systemd-nspawn@${CONTAINER_NAME}.service"
