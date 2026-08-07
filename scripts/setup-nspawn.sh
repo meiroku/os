@@ -108,6 +108,17 @@ else
     log_info "Debian base system already exists, skipping debootstrap."
 fi
 
+# --- ネットワーク・ホスト名の初期設定 ---
+log_info "Configuring hostname and /etc/hosts..."
+echo "$CONTAINER_NAME" > "${DEBIAN_ROOT}/etc/hostname"
+cat > "${DEBIAN_ROOT}/etc/hosts" <<EOF
+127.0.0.1   localhost
+::1         localhost ip6-localhost ip6-loopback
+ff02::1     ip6-allnodes
+ff02::2     ip6-allrouters
+127.0.1.1   ${CONTAINER_NAME}
+EOF
+
 # --- コンテナ内の初期設定 ---
 log_info "Updating package lists..."
 in_nspawn apt-get update -q
