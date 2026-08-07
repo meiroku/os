@@ -220,8 +220,26 @@ if [ -d /tmp/.X11-unix ]; then
     for x_sock in /tmp/.X11-unix/X*; do
         [ -S "$x_sock" ] || continue
         export DISPLAY=":${x_sock##*/X}"
+
+        # X11認証ファイルの自動検出
+        if [ -z "${XAUTHORITY:-}" ]; then
+            if [ -f "$HOME/.Xauthority" ]; then
+                export XAUTHORITY="$HOME/.Xauthority"
+            fi
+            # /mnt/host_run_user に配置される動的認証ファイルを探す
+            for auth in "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* "$XDG_RUNTIME_DIR"/xauth_* "$XDG_RUNTIME_DIR"/Xauthority; do
+                if [ -f "$auth" ] && [ -r "$auth" ]; then
+                    export XAUTHORITY="$auth"
+                    break
+                fi
+            done
+        fi
         break
     done
+fi
+# terminfoデータベースに存在しない端末(xterm-ghosttyなど)のエラー回避
+if ! infocmp >/dev/null 2>&1; then
+    export TERM=xterm-256color
 fi
 EOF
 chmod 0644 "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh"
