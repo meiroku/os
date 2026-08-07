@@ -60,6 +60,16 @@ ensure_container_group() {
     in_nspawn usermod -aG "$group_name" "$TARGET_USER" || true
 }
 
+get_debian_arch() {
+    case "$(uname -m)" in
+        x86_64)  echo "amd64" ;;
+        aarch64) echo "arm64" ;;
+        armv7l)  echo "armhf" ;;
+        i686)    echo "i386" ;;
+        *)       uname -m ;;
+    esac
+}
+
 # --- 事前チェック ---
 if (( EUID != 0 )); then
     die "This script must be run as root via sudo."
@@ -69,7 +79,7 @@ if [[ -z "${SUDO_USER:-}" || "${SUDO_USER:-}" == "root" ]]; then
     die "This script must be run via sudo from a normal user."
 fi
 
-for cmd in debootstrap systemd-nspawn machinectl dpkg getent; do
+for cmd in debootstrap systemd-nspawn machinectl getent; do
     require_cmd "$cmd"
 done
 
@@ -78,7 +88,7 @@ readonly CONTAINER_NAME="debian"
 readonly TARGET_USER="$SUDO_USER"
 readonly TARGET_UID="$(id -u "$TARGET_USER")"
 readonly TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
-readonly HOST_ARCH="$(dpkg --print-architecture)"
+readonly HOST_ARCH="$(get_debian_arch)"
 readonly DEBIAN_ROOT="/var/lib/machines/${CONTAINER_NAME}"
 readonly DEBIAN_RELEASE="trixie"
 readonly DEBIAN_MIRROR="https://deb.debian.org/debian/"
