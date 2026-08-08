@@ -23,7 +23,7 @@ require_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "Required command '$1' is not installed."
 }
 
-# systemd-nspawn環境下でコマンドを非対称的に実行
+# systemd-nspawn環境下でコマンドを非対話的に実行
 in_nspawn() {
     systemd-nspawn \
         --quiet \
@@ -140,7 +140,7 @@ EOF
 log_info "Updating apt package lists..."
 in_nspawn apt-get update -q
 
-# パッケージインストール中のデーモン自動起動を一時的にブロックする
+# パッケージインストール時のデーモン自動起動を一時的にブロックする
 cat > "${DEBIAN_ROOT}/usr/sbin/policy-rc.d" << 'EOF'
 #!/bin/sh
 exit 101
@@ -214,6 +214,7 @@ install -d -m 0755 "${DEBIAN_ROOT}/etc/profile.d"
 cat > "${DEBIAN_ROOT}/etc/profile.d/99-gui-env.sh" <<'EOF'
 # Auto-configured for GUI applications in systemd-nspawn
 
+# Pipewire / PulseAudio
 export XDG_RUNTIME_DIR="/mnt/host_run_user"
 export PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
 
@@ -221,6 +222,7 @@ if [ -S "${XDG_RUNTIME_DIR}/bus" ]; then
     export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
 fi
 
+# Wayland
 if [ -d "$XDG_RUNTIME_DIR" ]; then
     for w_sock in "$XDG_RUNTIME_DIR"/wayland-*; do
         case "$w_sock" in
@@ -233,6 +235,7 @@ if [ -d "$XDG_RUNTIME_DIR" ]; then
     done
 fi
 
+# X11 (Xwayland / Xorg)
 if [ -d /tmp/.X11-unix ]; then
     for x_sock in /tmp/.X11-unix/X*; do
         [ -S "$x_sock" ] || continue
