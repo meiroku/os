@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 umask 022
 
-# --- エラー時の表示 ---
+# --- エラーハンドリング ---
 trap 'log_error "Failed at ${BASH_SOURCE[0]}:${BASH_LINENO[0]}: ${BASH_COMMAND}"' ERR
 
 # --- ANSIエスケープシーケンス ---
@@ -11,15 +11,19 @@ readonly YELLOW=$'\033[1;33m'
 readonly RED=$'\033[1;31m'
 readonly RESET=$'\033[0m'
 
+# --- ロギング用関数 ---
 log_info()  { printf '%b\n' "${GREEN}[INFO]${RESET} $*"; }
 log_warn()  { printf '%b\n' "${YELLOW}[WARN]${RESET} $*"; }
 log_error() { printf '%b\n' "${RED}[ERROR]${RESET} $*" >&2; }
 die()       { log_error "$*"; exit 1; }
 
+# --- ユーティリティ関数 ---
+# 必須コマンドの存在確認
 require_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "Required command '$1' is not installed."
 }
 
+# systemd-nspawn環境下でコマンドを非対称的に実行
 in_nspawn() {
     systemd-nspawn \
         --quiet \
@@ -29,11 +33,13 @@ in_nspawn() {
         "$@"
 }
 
+# パスワードハッシュの有効性チェック
 hash_is_valid() {
     local hash="${1:-}"
     [[ -n "$hash" && "$hash" != "!" && "$hash" != "*" && "$hash" != "!!" ]]
 }
 
+# コンテナ内のグループGIDをホスト側と同期
 ensure_container_group() {
     local group_name="$1"
     local host_gid="$2"
@@ -44,14 +50,14 @@ ensure_container_group() {
 
         if [[ "$container_gid" != "$host_gid" ]]; then
             if in_nspawn getent group "$host_gid" >/dev/null 2>&1; then
-                log_warn "Container already has another group using GID ${host_gid}; skipping sync for ${group_name}."
+                log_warn "GID ${host_gid} is already in use; skipping sync for group ${group_name}."
             else
                 in_nspawn groupmod -g "$host_gid" "$group_name"
             fi
         fi
     else
         if in_nspawn getent group "$host_gid" >/dev/null 2>&1; then
-            log_warn "Container already has another group using GID ${host_gid}; creating ${group_name} was skipped."
+            log_warn "GID ${host_gid} is already in use; skipping creation of group ${group_name}."
         else
             in_nspawn groupadd -g "$host_gid" "$group_name"
         fi
@@ -60,6 +66,7 @@ ensure_container_group() {
     in_nspawn usermod -aG "$group_name" "$TARGET_USER" || true
 }
 
+# ホストアーキテクチャからDebianアーキテクチャ名を判別
 get_debian_arch() {
     case "$(uname -m)" in
         x86_64)  echo "amd64" ;;
@@ -95,19 +102,19 @@ readonly DEBIAN_MIRROR="https://deb.debian.org/debian/"
 
 [[ -n "$TARGET_HOME" ]] || die "Could not resolve home directory for user '${TARGET_USER}'."
 
-log_info "Target user: ${TARGET_USER} [UID: ${TARGET_UID}]"
+log_info "Target user: ${TARGET_USER} (UID: ${TARGET_UID})"
 log_info "Target home: ${TARGET_HOME}"
 log_info "Host architecture: ${HOST_ARCH}"
 log_info "Container root: ${DEBIAN_ROOT}"
 
-# --- 古い設定ファイルのクリーンアップ ---
+# 古い設定ファイルをクリーンアップ
 rm -f "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
 
 # --- コンテナ作成 ---
 mkdir -p "$DEBIAN_ROOT"
 
 if [[ ! -f "$DEBIAN_ROOT/etc/debian_version" ]]; then
-    log_info "Running debootstrap (${DEBIAN_RELEASE}, this may take a while)..."
+    log_info "Running debootstrap for ${DEBIAN_RELEASE} (this may take a while)..."
     debootstrap \
         --variant=minbase \
         --arch="$HOST_ARCH" \
@@ -115,7 +122,7 @@ if [[ ! -f "$DEBIAN_ROOT/etc/debian_version" ]]; then
         "$DEBIAN_ROOT" \
         "$DEBIAN_MIRROR"
 else
-    log_info "Debian base system already exists, skipping debootstrap."
+    log_info "Base system already exists in ${DEBIAN_ROOT}, skipping debootstrap."
 fi
 
 # --- ネットワーク・ホスト名の初期設定 ---
@@ -130,10 +137,10 @@ ff02::2     ip6-allrouters
 EOF
 
 # --- コンテナ内の初期設定 ---
-log_info "Updating package lists..."
+log_info "Updating apt package lists..."
 in_nspawn apt-get update -q
 
-# パッケージインストール中のデーモン自動起動をブロックする
+# パッケージインストール中のデーモン自動起動を一時的にブロックする
 cat > "${DEBIAN_ROOT}/usr/sbin/policy-rc.d" << 'EOF'
 #!/bin/sh
 exit 101
@@ -151,10 +158,10 @@ in_nspawn apt-get install -yq --no-install-recommends \
     wayland-utils x11-apps iproute2 iputils-ping \
     fonts-noto-cjk xdg-user-dirs
 
-# policy-rc.dを削除して通常動作に戻す
+# デーモン自動起動のブロックを解除
 rm -f "${DEBIAN_ROOT}/usr/sbin/policy-rc.d"
 
-log_info "Cleaning up apt cache..."
+log_info "Cleaning up apt caches..."
 in_nspawn apt-get clean
 in_nspawn rm -rf /var/lib/apt/lists/*
 
@@ -166,7 +173,7 @@ in_nspawn sed -i \
 in_nspawn locale-gen
 in_nspawn update-locale LANG=ja_JP.UTF-8 LANGUAGE=ja_JP:ja
 
-log_info "Configuring container user..."
+log_info "Configuring user ${TARGET_USER} in container..."
 if ! in_nspawn getent passwd "$TARGET_USER" >/dev/null 2>&1; then
     in_nspawn useradd -m -U -s /bin/bash -u "$TARGET_UID" "$TARGET_USER"
     in_nspawn cp -rnT /etc/skel "/home/${TARGET_USER}"
@@ -176,7 +183,7 @@ else
     log_info "User '${TARGET_USER}' already exists in container."
 fi
 
-log_info "Syncing group IDs from host..."
+log_info "Syncing hardware access groups from host..."
 for grp in video audio render input; do
     host_gid="$(getent group "$grp" | cut -d: -f3 || true)"
     if [[ -n "$host_gid" ]]; then
@@ -191,13 +198,13 @@ if ! in_nspawn getent group sudo >/dev/null 2>&1; then
 fi
 in_nspawn usermod -aG sudo "$TARGET_USER" || true
 
-log_info "Syncing user password from host..."
+log_info "Syncing password for ${TARGET_USER} from host shadow file..."
 host_hash="$(getent shadow "$TARGET_USER" | cut -d: -f2 || true)"
 
 if hash_is_valid "$host_hash"; then
     in_nspawn usermod -p "$host_hash" "$TARGET_USER"
 else
-    log_warn "Valid password hash could not be retrieved from host. Setting fallback password 'debian'."
+    log_warn "Could not retrieve valid password hash. Setting fallback password to 'debian'."
     printf '%s:%s\n' "$TARGET_USER" "debian" | in_nspawn chpasswd
 fi
 
@@ -231,12 +238,12 @@ if [ -d /tmp/.X11-unix ]; then
         [ -S "$x_sock" ] || continue
         export DISPLAY=":${x_sock##*/X}"
 
-        # X11認証ファイルの自動検出
+        # Auto-detect Xauthority file
         if [ -z "${XAUTHORITY:-}" ]; then
             if [ -f "$HOME/.Xauthority" ]; then
                 export XAUTHORITY="$HOME/.Xauthority"
             fi
-            # /mnt/host_run_userに配置される動的認証ファイルを探す
+            # Search for dynamic Xauthority files in host runtime directory
             for auth in "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* "$XDG_RUNTIME_DIR"/xauth_* "$XDG_RUNTIME_DIR"/Xauthority; do
                 if [ -f "$auth" ] && [ -r "$auth" ]; then
                     export XAUTHORITY="$auth"
@@ -247,7 +254,7 @@ if [ -d /tmp/.X11-unix ]; then
         break
     done
 fi
-# terminfoデータベースに存在しない端末のエラー回避
+# Fallback for missing terminfo entries
 if ! infocmp >/dev/null 2>&1; then
     export TERM=xterm-256color
 fi
@@ -265,11 +272,11 @@ EOF
 fi
 
 # --- ホスト側バインド用ディレクトリ・権限の準備 ---
-log_info "Ensuring host paths exist for bind mounts..."
+log_info "Preparing host directories for bind mounts..."
 mkdir -p /tmp/.X11-unix
 chmod 1777 /tmp/.X11-unix || true
 
-# ユーザー権限でホームディレクトリ以下の必要なパスを作成
+# ターゲットユーザー権限でホームディレクトリ以下のパスを作成
 sudo -u "$TARGET_USER" mkdir -p \
     "${TARGET_HOME}/.local/share/fonts" \
     "${TARGET_HOME}/.icons" \
@@ -303,12 +310,12 @@ BindReadOnly=${TARGET_HOME}/.local/share/fonts:/home/${TARGET_USER}/.local/share
 BindReadOnly=${TARGET_HOME}/.icons:/home/${TARGET_USER}/.icons
 EOF
 
-# ハードウェア依存ノードが存在する場合のみ追記
+# ハードウェアデバイスノードが存在する場合のみ追記
 for src in "/dev/dri" "/dev/snd" "/dev/input"; do
     [[ -e "$src" ]] && echo "Bind=$src" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
 done
 
-# システムの共有リソースが存在する場合のみ追記
+# システムの共有デザインリソースが存在する場合のみ追記
 for dir in "fonts" "icons" "themes"; do
     if [[ -d "/usr/share/${dir}" ]]; then
         echo "BindReadOnly=/usr/share/${dir}:/usr/local/share/${dir}" >> "/etc/systemd/nspawn/${CONTAINER_NAME}.nspawn"
@@ -316,7 +323,7 @@ for dir in "fonts" "icons" "themes"; do
 done
 
 # --- ホスト側のsystemdサービス構成と起動 ---
-log_info "Configuring systemd override for race condition prevention..."
+log_info "Configuring systemd override to prevent startup race conditions..."
 OVERRIDE_DIR="/etc/systemd/system/systemd-nspawn@${CONTAINER_NAME}.service.d"
 mkdir -p "$OVERRIDE_DIR"
 cat > "${OVERRIDE_DIR}/override.conf" <<EOF
